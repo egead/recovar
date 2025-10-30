@@ -1,4 +1,5 @@
 import tensorflow as tf
+from numpy import pi
 from tensorflow import keras
 from recovar.config import BATCH_SIZE
 from recovar.layers import AddNoise, NormalizeStd
@@ -7,7 +8,8 @@ from recovar.layers import (Downsample,
                                      Upsample,
                                      UpsampleNoactivation,
                                      ResIdentity,
-                                     Padding)
+                                     Padding,
+                                     MaskedConv)
 
 @tf.keras.utils.register_keras_serializable()
 class AutoencoderBlock(keras.Model):
@@ -47,12 +49,13 @@ class AutoencoderBlock(keras.Model):
         self.up5 = UpsampleNoactivation(3, 15, name="up_5")
 
     def _encoder(self, x, training):
-        x = self.down1(x, training=training)
-        x = self.down2(x, training=training)
-        x = self.pad1(x)
-        x = self.down3(x, training=training)
-        x = self.down4(x, training=training)
-        x = self.down5(x, training=training)
+        x0 = x
+        x1 = self.down1(x0, training=training)
+        x2 = self.down2(x1, training=training)
+        x2p = self.pad1(x2)
+        x3 = self.down3(x2p, training=training)
+        x4 = self.down4(x3, training=training)
+        x5 = self.down5(x4, training=training)
 
         x = self.resid1(x, training=training)
         x = self.resid2(x, training=training)
@@ -60,7 +63,7 @@ class AutoencoderBlock(keras.Model):
         x = self.resid4(x, training=training)
         x = self.resid5(x, training=training)
 
-        return x
+        return x, (x1, x2, x3, x4, x5)
 
     def _decoder(self, x, training):
         x = self.up1(x, training=training)
@@ -76,12 +79,77 @@ class AutoencoderBlock(keras.Model):
         x = self.inp(inputs)
         x = tf.cast(x, dtype=tf.float32)
 
-        f = self._encoder(x, training=training)
+        f, compressions = self._encoder(x, training=training)
         y = self._decoder(f, training=training)
 
-        return f, y
+        return f, y, compressions
     
+@tf.keras.utils.register_keras_serializable()
+class PickARSingle(keras.Model):
+    def __init__(self, name="pick_ar_single", *args, **kwargs):
+        super(PickARSingle, self).__init__(name=name, **kwargs)
 
+    def get_config(self):
+        config = super(PickARSingle, self).get_config()
+        return config
+
+    def build(self, input_shape=None):  # Create the state of the layer (weights)
+        self._input_shape = input_shape
+        self.num_input_channels = input_shape[-1]
+        
+        self.masked_conv1 = MaskedConv(activation="leaky_relu",
+                                       num_of_filters=4*self.num_input_channels,
+                                       filter_kernel_size=3)
+        self.masked_conv2 = MaskedConv(num_of_filters=2*self.num_input_channels,
+                                       filter_kernel_size=3)
+        
+    def call(self, x, training=False):
+        xp = tf.pad(x, paddings=[[0, 0], [1, 0], [0, 0]])
+        xp = xp[:, :-1, :]
+        f = self.masked_conv1(xp, training=training)
+        y = self.masked_conv2(f, training=training)
+        
+        mu = y[:, :, 0:self.num_input_channels]
+        log_var = y[:, :, self.num_input_channels:]
+
+        # 1 / ((2pi)^d/2 |det(sigma)|^1/2) exp(-0.5 * (x-mu)^T sigma^{-1} (x-mu))
+        term1 = -0.5 * tf.reduce_mean(tf.square(x - mu) / tf.exp(log_var), axis=-1)
+        term2 = -0.5 * tf.reduce_mean(log_var, axis=-1)
+        term3 = -0.5 * tf.math.log(2.0 * pi)
+        log_p_per_dim = term1 + term2 + term3
+
+        return log_p_per_dim
+    
+@tf.keras.utils.register_keras_serializable()
+class PickARMultiple(keras.Model):
+    def __init__(self, num_reps=1, name="pick_ar_multiple", *args, **kwargs):
+        super(PickARMultiple, self).__init__(name=name, **kwargs)
+        self.num_reps = num_reps
+        
+    def get_config(self):
+        config = super(PickARMultiple, self).get_config()
+        return config
+
+    def build(self, input_shape=None):  # Create the state of the layer (weights)
+        self._input_shape = input_shape
+        self._ar_pickers = []
+        
+        for i in range(self.num_reps):
+            ar_picker_single = PickARSingle()
+            x = tf.zeros(self._input_shape[i])
+            ar_picker_single(x, training=False)
+            
+            self._ar_pickers.append(ar_picker_single)
+            
+    def call(self, inputs, training=False):
+        log_ps = []
+        for i in range(self.num_reps):
+            x = inputs[i]
+            log_p = self._ar_pickers[i](x, training=training)
+            log_ps.append(log_p)
+            
+        return log_ps
+    
 @tf.keras.utils.register_keras_serializable()
 class RepresentationLearningSingleAutoencoder(keras.Model):
     N_TIMESTEPS = 3000
@@ -220,6 +288,12 @@ class RepresentationLearningMultipleAutoencoder(keras.Model):
         self.autoencoder4 = AutoencoderBlock("autoencoder_block4")
         self.autoencoder5 = AutoencoderBlock("autoencoder_block5")
 
+        self.ar1 = PickARMultiple()
+        self.ar2 = PickARMultiple()
+        self.ar3 = PickARMultiple()
+        self.ar4 = PickARMultiple()
+        self.ar5 = PickARMultiple()
+        
         self.linear1 = tf.Variable(
             initial_value=tf.keras.initializers.GlorotNormal()(shape=(64, 64)),
             dtype=tf.float32,
@@ -261,6 +335,23 @@ class RepresentationLearningMultipleAutoencoder(keras.Model):
         self.bn4 = tf.keras.layers.BatchNormalization(center=False, scale=False)
         self.bn5 = tf.keras.layers.BatchNormalization(center=False, scale=False)
 
+    def estimate_p_arrival_probability(self, 
+                                       logp_comps):
+        t = tf.linspace(0., 1., self.N_TIMESTEPS)
+        log_p_probs = tf.zeros(shape=[self.N_TIMESTEPS])
+        
+        for log_p_comp in logp_comps:
+            sh = tf.shape(log_p_comp)
+            n = sh[-1]
+            t_comp = tf.linspace(0., 1., n)
+            deltat = t[1] - t[0]
+            oversampler_mask = tf.where(tf.abs(t_comp[:, None] - t[None, :]) < deltat, 
+                                        1., 0.)
+            log_p_univ = log_p_comp @ oversampler_mask
+            log_p_probs = log_p_probs + log_p_univ
+    
+        return tf.exp(log_p_probs)
+        
     def call(self, inputs, training=False):
         x = self.inp(inputs)
         x = tf.cast(x, dtype=tf.float32)
@@ -269,12 +360,23 @@ class RepresentationLearningMultipleAutoencoder(keras.Model):
         x = self.add_noise(x)
         x = self.normalize2(x)
 
-        f1, y1 = self.autoencoder1(x, training=training)
-        f2, y2 = self.autoencoder2(x, training=training)
-        f3, y3 = self.autoencoder3(x, training=training)
-        f4, y4 = self.autoencoder4(x, training=training)
-        f5, y5 = self.autoencoder5(x, training=training)
+        f1, y1, comp1 = self.autoencoder1(x, training=training)
+        f2, y2, comp2 = self.autoencoder2(x, training=training)
+        f3, y3, comp3 = self.autoencoder3(x, training=training)
+        f4, y4, comp4 = self.autoencoder4(x, training=training)
+        f5, y5, comp5 = self.autoencoder5(x, training=training)
 
+        logp_comp1 = self.ar1(tf.stop_gradient(comp1))
+        logp_comp2 = self.ar2(tf.stop_gradient(comp2))
+        logp_comp3 = self.ar3(tf.stop_gradient(comp3))
+        logp_comp4 = self.ar4(tf.stop_gradient(comp4))
+        logp_comp5 = self.ar5(tf.stop_gradient(comp5))
+        
+        # logp_(n; mu, sigma}(x) = -log (det(sigma)) -(x_n - mu)^T sigma (x-mu)
+        # If sigma is diagonal, 
+        # logp_(n; mu, sigma}(x) = 
+        # -\alpha \sum log var - \sum_c (x_{nc} - mu_c) var_c (x_{nc}-mu_c)
+        
         f1p = tf.transpose(
             tf.matmul(self.linear1, tf.stop_gradient(f1), transpose_b=True),
             perm=[0, 2, 1],
@@ -306,8 +408,10 @@ class RepresentationLearningMultipleAutoencoder(keras.Model):
         ensemble_distance_loss = self._get_ensemble_distance_loss(
             f1p, f2p, f3p, f4p, f5p
         )
-
-        self.add_loss(reconstruction_loss + ensemble_distance_loss)
+        all_log_ps = logp_comp1 + logp_comp2 + logp_comp3 + logp_comp4 + logp_comp5 
+        picker_loss = self._get_picker_loss(all_log_ps)
+        
+        self.add_loss(reconstruction_loss + ensemble_distance_loss + picker_loss)
 
         return f1p, f2p, f3p, f4p, f5p, y1, y2, y3, y4, y5
 
@@ -338,6 +442,17 @@ class RepresentationLearningMultipleAutoencoder(keras.Model):
 
         return reconstruction_loss
 
+    def _get_picker_loss(self, log_ps):
+        h_means = []
+        for log_p in log_ps:
+            h = -tf.reduce_mean(log_p, axis=0)
+            h_mean = tf.reduce_mean(h)
+            h_means.append(h_mean)
+        
+        h_grand_mean = tf.reduce_mean(tf.convert_to_tensor(h_means))
+        
+        return h_grand_mean
+    
     def _l2_after_channel_normalizing(self, x, y):
         x = demean(x, axis=1)
         y = demean(y, axis=1)

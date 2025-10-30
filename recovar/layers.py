@@ -64,7 +64,30 @@ class Conv(tf.keras.layers.Layer):
 
         return x
 
-
+@tf.keras.utils.register_keras_serializable()
+class MaskedConv(tf.keras.layers.Layer):
+    def __init__(
+        self, num_of_filters, filter_kernel_size, activation=None, name="masked_conv", *args, **kwargs
+    ):
+        super(MaskedConv, self).__init__(name=name, **kwargs)
+        self.num_of_filters = num_of_filters
+        self.conv = tf.keras.layers.Conv1D(
+            num_of_filters, filter_kernel_size, padding="causal"
+        )
+        self.activation = activation
+        self.bn = tf.keras.layers.BatchNormalization(axis=-1)
+    
+    def call(self, input_tensor, training=False):
+        x = self.conv(input_tensor)
+        x = self.bn(x, training=training)
+        
+        if self.activation == None:
+            return x
+        elif self.activation == "relu":
+            return tf.nn.relu(x)
+        elif self.activation == "leaky_relu":
+            return tf.nn.leaky_relu(x)
+    
 @tf.keras.utils.register_keras_serializable()
 class Upsample(tf.keras.layers.Layer):
     def __init__(
