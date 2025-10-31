@@ -349,8 +349,8 @@ class RepresentationLearningMultipleAutoencoder(keras.Model):
                                         1., 0.)
             log_p_univ = log_p_comp @ oversampler_mask
             log_p_probs = log_p_probs + log_p_univ
-    
-        return tf.exp(log_p_probs)
+
+        return log_p_probs
         
     def call(self, inputs, training=False):
         x = self.inp(inputs)
@@ -408,12 +408,20 @@ class RepresentationLearningMultipleAutoencoder(keras.Model):
         ensemble_distance_loss = self._get_ensemble_distance_loss(
             f1p, f2p, f3p, f4p, f5p
         )
-        all_log_ps = logp_comp1 + logp_comp2 + logp_comp3 + logp_comp4 + logp_comp5 
+        all_log_ps = logp_comp1 + logp_comp2 + logp_comp3 + logp_comp4 + logp_comp5
         picker_loss = self._get_picker_loss(all_log_ps)
-        
+
         self.add_loss(reconstruction_loss + ensemble_distance_loss + picker_loss)
 
-        return f1p, f2p, f3p, f4p, f5p, y1, y2, y3, y4, y5
+        if training:
+            return f1p, f2p, f3p, f4p, f5p, y1, y2, y3, y4, y5
+        else:
+            log_p_upsampled = self.estimate_p_arrival_probability(all_log_ps)
+            surprise = -log_p_upsampled
+            pickability_score = tf.reduce_max(surprise) / tf.reduce_mean(surprise)
+            pick_index = tf.argmax(surprise)
+
+            return f1p, f2p, f3p, f4p, f5p, y1, y2, y3, y4, y5, log_p_upsampled, surprise, pick_index, pickability_score
 
     def _get_ensemble_distance_loss(self, f1p, f2p, f3p, f4p, f5p):
         ensemble_distance_loss = (
