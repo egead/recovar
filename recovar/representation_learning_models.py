@@ -57,7 +57,7 @@ class AutoencoderBlock(keras.Model):
         x4 = self.down4(x3, training=training)
         x5 = self.down5(x4, training=training)
 
-        x = self.resid1(x, training=training)
+        x = self.resid1(x5, training=training)
         x = self.resid2(x, training=training)
         x = self.resid3(x, training=training)
         x = self.resid4(x, training=training)
@@ -111,6 +111,7 @@ class PickARSingle(keras.Model):
         
         mu = y[:, :, 0:self.num_input_channels]
         log_var = y[:, :, self.num_input_channels:]
+        log_var = tf.clip_by_value(log_var, -10.0, 10.0) #NaN exp overflow
 
         # 1 / ((2pi)^d/2 |det(sigma)|^1/2) exp(-0.5 * (x-mu)^T sigma^{-1} (x-mu))
         term1 = -0.5 * tf.reduce_mean(tf.square(x - mu) / tf.exp(log_var), axis=-1)
@@ -122,7 +123,7 @@ class PickARSingle(keras.Model):
     
 @tf.keras.utils.register_keras_serializable()
 class PickARMultiple(keras.Model):
-    def __init__(self, num_reps=1, name="pick_ar_multiple", *args, **kwargs):
+    def __init__(self, num_reps=5, name="pick_ar_multiple", *args, **kwargs):
         super(PickARMultiple, self).__init__(name=name, **kwargs)
         self.num_reps = num_reps
         
@@ -135,7 +136,7 @@ class PickARMultiple(keras.Model):
         self._ar_pickers = []
         
         for i in range(self.num_reps):
-            ar_picker_single = PickARSingle()
+            ar_picker_single = PickARSingle(name=f"pick_ar_single_{i}")
             x = tf.zeros(self._input_shape[i])
             ar_picker_single(x, training=False)
             
@@ -366,11 +367,11 @@ class RepresentationLearningMultipleAutoencoder(keras.Model):
         f4, y4, comp4 = self.autoencoder4(x, training=training)
         f5, y5, comp5 = self.autoencoder5(x, training=training)
 
-        logp_comp1 = self.ar1(tf.stop_gradient(comp1))
-        logp_comp2 = self.ar2(tf.stop_gradient(comp2))
-        logp_comp3 = self.ar3(tf.stop_gradient(comp3))
-        logp_comp4 = self.ar4(tf.stop_gradient(comp4))
-        logp_comp5 = self.ar5(tf.stop_gradient(comp5))
+        logp_comp1 = self.ar1(tuple(tf.stop_gradient(c) for c in comp1))
+        logp_comp2 = self.ar2(tuple(tf.stop_gradient(c)for c in comp2))
+        logp_comp3 = self.ar3(tuple(tf.stop_gradient(c) for c in comp3))
+        logp_comp4 = self.ar4(tuple(tf.stop_gradient(c) for c in comp4))
+        logp_comp5 = self.ar5(tuple(tf.stop_gradient(c) for c in comp5))
         
         # logp_(n; mu, sigma}(x) = -log (det(sigma)) -(x_n - mu)^T sigma (x-mu)
         # If sigma is diagonal, 

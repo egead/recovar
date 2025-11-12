@@ -183,7 +183,7 @@ class ClassifierMultipleAutoencoder(keras.Model):
         x = self.model.inp(inputs)
         x = tf.cast(x, dtype=tf.float32)
 
-        f1, f2, f3, f4, f5, __, __, __, __, __ = self.model(x, training=training)
+        f1, f2, f3, f4, f5, *_ = self.model(x, training=training)
         fcov = self._cross_covariance_ensemble_mean([f1, f2, f3, f4, f5])
         
         return eq_metric(fcov)

@@ -9,11 +9,25 @@ from config import KFOLD_SPLITS
 MODEL_CLASSES = [RepresentationLearningMultipleAutoencoder]
 
 # Should be stead, instance, or any custom dataset defined in settings.json
-DATASETS = ["MERGED_fixed"]
+#ATASETS = ["instance"]
 
 # Number of epochs
-NUM_EPOCHS = 20
+#NUM_EPOCHS = 5
 # For all splits, train the model over defined datasets.
+
+trainer = KfoldTrainer(
+    exp_name="slvt_picked_2",
+    model_class=RepresentationLearningMultipleAutoencoder,
+    dataset="SLVT_fixed",
+    split=0,
+    epochs=5,
+    apply_resampling=False,
+    learning_rate=1e-4
+)
+
+trainer.train()
+
+"""
 for eq_ratio in [0.01, 0.02, 0.03, 0.04, 0.05]:
     for train_dataset in DATASETS:
         for model_class in MODEL_CLASSES:
@@ -31,3 +45,4 @@ for eq_ratio in [0.01, 0.02, 0.03, 0.04, 0.05]:
                     resampling_eq_ratio=eq_ratio
                 )
                 kfold_trainer.train()
+"""
