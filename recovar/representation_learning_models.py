@@ -57,7 +57,7 @@ class AutoencoderBlock(keras.Model):
         x4 = self.down4(x3, training=training)
         x5 = self.down5(x4, training=training)
 
-        x = self.resid1(x, training=training)
+        x = self.resid1(x5, training=training)
         x = self.resid2(x, training=training)
         x = self.resid3(x, training=training)
         x = self.resid4(x, training=training)
@@ -450,7 +450,7 @@ class RepresentationLearningMultipleAutoencoder(keras.Model):
             pickability_score = tf.reduce_max(surprise) / tf.reduce_mean(surprise)
             pick_index = tf.argmax(surprise)
 
-            return f1p, f2p, f3p, f4p, f5p, y1, y2, y3, y4, y5, log_p_upsampled, surprise, pick_index, pickability_score
+            return f1p, f2p, f3p, f4p, f5p, y1, y2, y3, y4, y5, surprise, pick_index, pickability_score
 
     def _get_ensemble_distance_loss(self, f1p, f2p, f3p, f4p, f5p):
         ensemble_distance_loss = (
