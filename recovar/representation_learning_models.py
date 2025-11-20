@@ -315,11 +315,11 @@ class RepresentationLearningMultipleAutoencoder(keras.Model):
         self.autoencoder4 = AutoencoderBlock("autoencoder_block4")
         self.autoencoder5 = AutoencoderBlock("autoencoder_block5")
 
-        self.ar1 = PickARMultiple("ar_multiple_1")
-        self.ar2 = PickARMultiple("ar_multiple_2")
-        self.ar3 = PickARMultiple("ar_multiple_3")
-        self.ar4 = PickARMultiple("ar_multiple_4")
-        self.ar5 = PickARMultiple("ar_multiple_5")
+        self.ar1 = PickARMultiple(name="ar_multiple_1")
+        self.ar2 = PickARMultiple(name="ar_multiple_2")
+        self.ar3 = PickARMultiple(name="ar_multiple_3")
+        self.ar4 = PickARMultiple(name="ar_multiple_4")
+        self.ar5 = PickARMultiple(name="ar_multiple_5")
         
         self.linear1 = tf.Variable(
             initial_value=tf.keras.initializers.GlorotNormal()(shape=(64, 64)),
