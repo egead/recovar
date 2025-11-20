@@ -142,10 +142,12 @@ class PickARSingle(keras.Model):
         initial_value = tf.random.normal(shape=self._input_shape[1:])
         self.log_var = tf.Variable(initial_value=initial_value,
                                    trainable=True,
-                                   dtype=tf.float32)
+                                   dtype=tf.float32,
+                                   name=f"{self.name}/log_var")
         self.means = tf.Variable(initial_value=initial_value,
                                  trainable=True,
-                                 dtype=tf.float32)
+                                 dtype=tf.float32,
+                                 name=f"{self.name}/means")
     
 @tf.keras.utils.register_keras_serializable()
 class PickARMultiple(keras.Model):
