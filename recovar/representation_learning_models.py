@@ -129,8 +129,9 @@ class PickARSingle(keras.Model):
         log_var = self.log_var_limit * tf.nn.tanh(self.log_var / self.log_var_limit)
         var = tf.exp(log_var)
         x_demeaned = x - tf.expand_dims(self.means, axis=0)
-        
-        term1 = -0.5 * tf.square(x_demeaned) / var
+
+        #Changed to reduce over channels to get shape (batch, timesteps) (HAD SHAPE MISMATCH ERROR BEFORE)
+        term1 = -0.5 * tf.reduce_mean(tf.square(x_demeaned) / var, axis=-1)
         term2 = -0.5 * tf.reduce_mean(log_var, axis=-1)
         term3 = -0.5 * tf.math.log(2.0 * pi)
 
