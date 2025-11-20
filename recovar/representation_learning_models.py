@@ -97,12 +97,14 @@ class PickARSingle(keras.Model):
     def build(self, input_shape=None):  # Create the state of the layer (weights)
         self._input_shape = input_shape
         self.num_input_channels = input_shape[-1]
-        
+
         self.masked_conv1 = MaskedConv(activation="leaky_relu",
                                        num_of_filters=4*self.num_input_channels,
                                        filter_kernel_size=3)
         self.masked_conv2 = MaskedConv(num_of_filters=2*self.num_input_channels,
                                        filter_kernel_size=3)
+
+        self.create_gaussian_log_var()
         
     def call(self, x, training=False):
         log_p_per_dim = self._estimate_gaussian_log_p(x)
@@ -136,11 +138,11 @@ class PickARSingle(keras.Model):
         return log_p_per_dim
     
     def create_gaussian_log_var(self):
-        initial_value = tf.random.normal(shape=self.input_shape[1:])
-        self.log_var = tf.Variable(initial_value=initial_value, 
+        initial_value = tf.random.normal(shape=self._input_shape[1:])
+        self.log_var = tf.Variable(initial_value=initial_value,
                                    trainable=True,
                                    dtype=tf.float32)
-        self.means = tf.Variable(initial_value=initial_value[1:], 
+        self.means = tf.Variable(initial_value=initial_value,
                                  trainable=True,
                                  dtype=tf.float32)
     
