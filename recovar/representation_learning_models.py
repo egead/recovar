@@ -382,8 +382,7 @@ class RepresentationLearningMultipleAutoencoder(keras.Model):
                                         1., 0.)
             mi_single = log_p_cond_comp - log_p_comp
             mi_single_oversampled = mi_single @ oversampler_mask
-            mi_single_oversampled_mean = tf.reduce_mean(mi_single_oversampled, axis=0)
-            average_surprise = average_surprise + mi_single_oversampled_mean
+            average_surprise = average_surprise + mi_single_oversampled
     
         return average_surprise
         
