@@ -451,6 +451,8 @@ class RepresentationLearningMultipleAutoencoder(keras.Model):
             return f1p, f2p, f3p, f4p, f5p, y1, y2, y3, y4, y5
         else:
             surprise = self.estimate_surprise(all_log_ps, all_log_p_conds)
+            trim=500
+            surprise = surprise[trim:-trim]
             pickability_score = tf.reduce_max(surprise) / tf.reduce_mean(surprise)
             pick_index = tf.argmax(surprise)
 
