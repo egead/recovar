@@ -116,6 +116,7 @@ class PickARSingle(keras.Model):
         
         mu = y[:, :, 0:self.num_input_channels]
         log_var = self.log_var_limit * tf.nn.tanh(y[:, :, self.num_input_channels:] / self.log_var_limit)
+        var = tf.exp(log_var)
 
         term1 = -0.5 * tf.reduce_mean(tf.square(x - mu) / var, axis=-1)
         term2 = -0.5 * tf.reduce_mean(log_var, axis=-1)
@@ -128,17 +129,24 @@ class PickARSingle(keras.Model):
     def _estimate_gaussian_log_p(self, x):
         log_var = self.log_var_limit * tf.nn.tanh(self.log_var / self.log_var_limit)
         var = tf.exp(log_var)
-        x_demeaned = x - tf.expand_dims(self.means, axis=0)
+        means = tf.expand_dims(self.means, axis=0)
+        x_demeaned = x - tf.expand_dims(means, axis=0)
 
-        term1 = -0.5 * tf.reduce_mean(tf.square(x_demeaned) / tf.expand_dims(var, axis=0), axis=-1)
-        term2 = -0.5 * tf.reduce_mean(tf.expand_dims(log_var, axis=0), axis=-1)
+        var = tf.expand_dims(var, axis=0)
+        var = tf.expand_dims(var, axis=0)
+
+        log_var = tf.expand_dims(log_var, axis=0)
+        log_var = tf.expand_dims(log_var, axis=0)
+
+        term1 = -0.5 * tf.reduce_mean(tf.square(x_demeaned) / var, axis=-1)
+        term2 = -0.5 * tf.reduce_mean(log_var, axis=-1)
         term3 = -0.5 * tf.math.log(2.0 * pi)
 
         log_p_per_dim = term1 + term2 + term3
         return log_p_per_dim
     
     def create_gaussian_log_var(self):
-        initial_value = tf.random.normal(shape=self._input_shape[1:])
+        initial_value = tf.random.normal(shape=self._input_shape[2:])
         self.log_var = tf.Variable(initial_value=initial_value,
                                    trainable=True,
                                    dtype=tf.float32,
@@ -367,20 +375,20 @@ class RepresentationLearningMultipleAutoencoder(keras.Model):
         self.bn5 = tf.keras.layers.BatchNormalization(center=False, scale=False)
 
     def estimate_surprise(self, 
-                                       logp_comps,
-                                       logp_cond_comps):
+                          logp_comps,
+                          logp_cond_comps):
         t = tf.linspace(0., 1., self.N_TIMESTEPS)
-        average_surprise = tf.zeros(shape=[self.N_TIMESTEPS])
+        average_surprise = tf.zeros(shape=[1, self.N_TIMESTEPS])
         
         for log_p_comp, log_p_cond_comp in zip(logp_comps, logp_cond_comps):
             sh = tf.shape(log_p_comp)
             n = sh[-1]
             t_comp = tf.linspace(0., 1., n)
-            deltat = t[1] - t[0]
-            oversampler_mask = tf.where(tf.abs(t_comp[:, None] - t[None, :]) < deltat, 
-                                        1., 0.)
+            deltat = t[1]-t[0]
+            oversampler_mask = tf.exp(-0.5 * tf.square(t_comp[:, None] - t[None, :] / deltat))
             mi_single = log_p_cond_comp - log_p_comp
             mi_single_oversampled = mi_single @ oversampler_mask
+            print('Mi_single and Mi_single Oversamples', mi_single, mi_single_oversampled)
             average_surprise = average_surprise + mi_single_oversampled
     
         return average_surprise
@@ -451,8 +459,10 @@ class RepresentationLearningMultipleAutoencoder(keras.Model):
             return f1p, f2p, f3p, f4p, f5p, y1, y2, y3, y4, y5
         else:
             surprise = self.estimate_surprise(all_log_ps, all_log_p_conds)
-            pickability_score = tf.reduce_max(surprise) / tf.reduce_mean(surprise)
-            pick_index = tf.argmax(surprise)
+            trim=500
+            surprise = surprise[:,trim:-trim]
+            pickability_score = tf.reduce_max(surprise, axis = 1) / tf.reduce_mean(surprise, axis=1)
+            pick_index = tf.argmax(surprise, axis=1)
 
             return f1p, f2p, f3p, f4p, f5p, y1, y2, y3, y4, y5, surprise, pick_index, pickability_score
 

@@ -16,13 +16,11 @@ MODEL_CLASSES = [RepresentationLearningMultipleAutoencoder]
 # For all splits, train the model over defined datasets.
 
 trainer = KfoldTrainer(
-    exp_name="bgkt_picked",
+    exp_name="slvt_picked_batch_match",
     model_class=RepresentationLearningMultipleAutoencoder,
-    dataset="BGKT_fixed",
+    dataset="SLVT_fixed",
     split=0,
     epochs=5,
-    apply_resampling=False,
-    learning_rate=1e-4
 )
 
 trainer.train()
