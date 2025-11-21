@@ -117,10 +117,10 @@ class PickARSingle(keras.Model):
         mu = y[:, :, 0:self.num_input_channels]
         log_var = self.log_var_limit * tf.nn.tanh(y[:, :, self.num_input_channels:] / self.log_var_limit)
 
-        # 1 / ((2pi)^d/2 |det(sigma)|^1/2) exp(-0.5 * (x-mu)^T sigma^{-1} (x-mu))
-        term1 = -0.5 * tf.reduce_mean(tf.square(x - mu) / tf.exp(log_var), axis=-1)
+        term1 = -0.5 * tf.reduce_mean(tf.square(x - mu) / var, axis=-1)
         term2 = -0.5 * tf.reduce_mean(log_var, axis=-1)
         term3 = -0.5 * tf.math.log(2.0 * pi)
+
         log_p_cond_per_dim = term1 + term2 + term3
 
         return log_p_per_dim, log_p_cond_per_dim
@@ -130,9 +130,8 @@ class PickARSingle(keras.Model):
         var = tf.exp(log_var)
         x_demeaned = x - tf.expand_dims(self.means, axis=0)
 
-        #Changed to reduce over channels to get shape (batch, timesteps) (HAD SHAPE MISMATCH ERROR BEFORE)
-        term1 = -0.5 * tf.reduce_mean(tf.square(x_demeaned) / var, axis=-1)
-        term2 = -0.5 * tf.reduce_mean(log_var, axis=-1)
+        term1 = -0.5 * tf.reduce_mean(tf.square(x_demeaned) / tf.expand_dims(var, axis=0), axis=-1)
+        term2 = -0.5 * tf.reduce_mean(tf.expand_dims(log_var, axis=0), axis=-1)
         term3 = -0.5 * tf.math.log(2.0 * pi)
 
         log_p_per_dim = term1 + term2 + term3
