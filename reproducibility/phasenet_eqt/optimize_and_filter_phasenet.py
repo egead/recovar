@@ -41,6 +41,7 @@ for date in sorted(date_files.keys()):
 
     windows, pick_times, peak_probs = extract_windows_phasenet(
         stream,
+        model=model,
         phase='P',
         threshold=LOW_THRESHOLD
     )
@@ -64,9 +65,9 @@ for date in sorted(date_files.keys()):
 df = pd.DataFrame(all_metadata)
 
 print(f"\nLabeling picks against catalog...")
-df['pick_time'] = pd.to_datetime(df['pick_time'])
-df['start_time'] = pd.to_datetime(df['start_time'])
-df['end_time'] = pd.to_datetime(df['end_time'])
+df['pick_time'] = pd.to_datetime(df['pick_time'], format='ISO8601')
+df['start_time'] = pd.to_datetime(df['start_time'], format='ISO8601')
+df['end_time'] = pd.to_datetime(df['end_time'], format='ISO8601')
 
 labels = []
 for _, pick_row in df.iterrows():

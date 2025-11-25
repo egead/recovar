@@ -5,8 +5,9 @@ import os
 import seisbench.models as sbm
 from scipy.signal import find_peaks
 
-def extract_windows_phasenet(stream, model_name='instance', threshold=0.7, phase='P', window_samples=4500):
-    model = sbm.PhaseNet.from_pretrained(model_name)
+def extract_windows_phasenet(stream, model=None, model_name='instance', threshold=0.7, phase='P', window_samples=4500):
+    if model is None:
+        model = sbm.PhaseNet.from_pretrained(model_name)
 
     stream_sync = stream.copy()
     stream_sync.merge(method=1, fill_value=0)
