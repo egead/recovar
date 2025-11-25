@@ -132,7 +132,6 @@ print(f"\n=== FINAL PERFORMANCE WITH THRESHOLD {best_threshold:.4f} ===")
 print(f"TP={tp}, FP={fp}, FN={fn}, TN={tn}")
 print(f"Precision={precision:.3f}, Recall={recall:.3f}, F1={best_f1:.3f}")
 
-# Evaluate manual thresholds
 manual_thresholds = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 print(f"\n=== PERFORMANCE AT MANUAL THRESHOLDS ===")
 for manual_thr in manual_thresholds:
@@ -155,7 +154,7 @@ filtered_df = df[df['phasenet_prob'] >= best_threshold].copy()
 filtered_phasenet_picks_dir = 'filtered_phasenet_picks_dir'
 os.makedirs(filtered_phasenet_picks_dir, exist_ok=True)
 
-print(f"Copying {len(filtered_df)} filtered windows...")
+print(f"Copying {len(filtered_df)} filtered windows (optimal threshold {best_threshold:.4f})...")
 for filename in filtered_df['filename']:
     src = os.path.join(temp_phasenet_picks_dir, filename)
     dst = os.path.join(filtered_phasenet_picks_dir, filename)
@@ -163,11 +162,28 @@ for filename in filtered_df['filename']:
 
 filtered_df.to_csv(os.path.join(filtered_phasenet_picks_dir, 'metadata.csv'), index=False)
 
+for manual_thr in manual_thresholds:
+    manual_filtered_df = df[df['phasenet_prob'] >= manual_thr].copy()
+    manual_dir = f'filtered_phasenet_picks_dir_thr_{manual_thr:.2f}'
+    os.makedirs(manual_dir, exist_ok=True)
+
+    print(f"Copying {len(manual_filtered_df)} filtered windows (threshold {manual_thr:.2f})...")
+    for filename in manual_filtered_df['filename']:
+        src = os.path.join(temp_phasenet_picks_dir, filename)
+        dst = os.path.join(manual_dir, filename)
+        shutil.copy(src, dst)
+
+    manual_filtered_df.to_csv(os.path.join(manual_dir, 'metadata.csv'), index=False)
+
 print(f"\nCleaning up temporary directory...")
 shutil.rmtree(temp_phasenet_picks_dir)
 
 print(f"\n=== DONE ===")
-print(f"Filtered {len(df)} picks → {len(filtered_df)} picks")
+print(f"Filtered {len(df)} picks → {len(filtered_df)} picks (optimal threshold)")
 print(f"Reduction: {100 * (1 - len(filtered_df)/len(df)):.1f}%")
 print(f"Saved to: {filtered_phasenet_picks_dir}/")
 print(f"Optimal PhaseNet threshold: {best_threshold:.4f}")
+print(f"\nAdditional filtered datasets saved for manual thresholds:")
+for manual_thr in manual_thresholds:
+    manual_count = len(df[df['phasenet_prob'] >= manual_thr])
+    print(f"  Threshold {manual_thr:.2f}: {manual_count} picks → filtered_phasenet_picks_dir_thr_{manual_thr:.2f}/")

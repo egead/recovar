@@ -6,8 +6,14 @@ from yazel_integration import recovar_pick_cleaner_batch, load_recovar_classifie
 
 MODEL_PATH = '/mnt/data_a/ege/recovar_models/exp_instance/representation_learning_autoencoder_ensemble/instance/split0/ep19.h5'
 
-phasenet_pick_dir = "filtered_phasenet_picks_dir"
-phasenet_picks = pd.read_csv("filtered_phasenet_picks_dir/metadata.csv")
+PHASENET_THRESHOLD = None
+
+if PHASENET_THRESHOLD is None:
+    phasenet_pick_dir = "filtered_phasenet_picks_dir"
+else:
+    phasenet_pick_dir = f"filtered_phasenet_picks_dir_thr_{PHASENET_THRESHOLD:.2f}"
+
+phasenet_picks = pd.read_csv(f"{phasenet_pick_dir}/metadata.csv")
 
 catalog_path = '/home/boxx/Public/earthquake_model_evaluations/data/SilivriPaper_2019-09-01__2019-11-30/processed_catalogs/kara74a_phase_picks.csv'
 catalog = pd.read_csv(catalog_path)
