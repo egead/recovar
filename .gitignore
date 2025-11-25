@@ -2,15 +2,11 @@
 reproducibility/phasenet_eqt/filtered_phasenet_picks_dir
 reproducibility/continous_results
 reproducibility/bootstrap_results
-#reproducibility/phasenet_eqt
-reproducibility/phasenet_eqt/phasenet_windows_SLVT
-reproducibility/phasenet_eqt/phasenet_windows_SLVT_compare
-reproducibility/phasenet_eqt/10NOV-2-3_phasenet_windows
-reproducibility/phasenet_eqt/10NOV-18-19_phasenet_windows
-reproducibility/phasenet_eqt/18-19phasenet_windows
+reproducibility/phasenet_eqt/phasenet_picks
 reproducibility/phasenet_eqt/BALIKESIR_CONTINUOUS_TEST_NOVEMBER
 reproducibility/dataset_exploration.ipynb
 reproducibility/phasenet_eqt/.claude/agents
+
 __pycache__/
 *.py[cod]
 *$py.class

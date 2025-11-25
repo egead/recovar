@@ -9,7 +9,7 @@ MODEL_PATH = '/mnt/data_a/ege/recovar_models/exp_instance/representation_learnin
 PHASENET_THRESHOLD = None
 
 if PHASENET_THRESHOLD is None:
-    phasenet_pick_dir = "filtered_phasenet_picks_dir"
+    phasenet_pick_dir = "filtered_phasenet_picks_dir_thr_0.30"
 else:
     phasenet_pick_dir = f"filtered_phasenet_picks_dir_thr_{PHASENET_THRESHOLD:.2f}"
 
@@ -159,8 +159,7 @@ print(f"\n=== FINAL PERFORMANCE WITH THRESHOLD {best_threshold:.6f} ===")
 print(f"TP={tp}, FP={fp}, FN={fn}, TN={tn}")
 print(f"Precision={precision:.3f}, Recall={recall:.3f}, F1={f1:.3f}")
 
-# Evaluate manual thresholds
-manual_thresholds = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+manual_thresholds = [0.08,0.09,0.1,0.12,0.13,0.14,0.15,0.16]
 print(f"\n=== PERFORMANCE AT MANUAL THRESHOLDS ===")
 for manual_thr in manual_thresholds:
     comparison_df['manual_decision'] = comparison_df['model_score'] >= manual_thr
