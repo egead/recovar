@@ -1,8 +1,15 @@
 # Byte-compiled / optimized / DLL files
 reproducibility/continous_results
 reproducibility/bootstrap_results
-reproducibility/phasenet_eqt
+#reproducibility/phasenet_eqt
+reproducibility/phasenet_eqt/phasenet_windows_SLVT
+reproducibility/phasenet_eqt/phasenet_windows_SLVT_compare
+reproducibility/phasenet_eqt/10NOV-2-3_phasenet_windows
+reproducibility/phasenet_eqt/10NOV-18-19_phasenet_windows
+reproducibility/phasenet_eqt/18-19phasenet_windows
+reproducibility/phasenet_eqt/BALIKESIR_CONTINUOUS_TEST_NOVEMBER
 reproducibility/dataset_exploration.ipynb
+
 __pycache__/
 *.py[cod]
 *$py.class
