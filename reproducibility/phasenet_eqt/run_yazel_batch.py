@@ -153,5 +153,24 @@ print(f"\n=== FINAL PERFORMANCE WITH THRESHOLD {best_threshold:.6f} ===")
 print(f"TP={tp}, FP={fp}, FN={fn}, TN={tn}")
 print(f"Precision={precision:.3f}, Recall={recall:.3f}, F1={f1:.3f}")
 
+# Evaluate manual thresholds
+manual_thresholds = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+print(f"\n=== PERFORMANCE AT MANUAL THRESHOLDS ===")
+for manual_thr in manual_thresholds:
+    comparison_df['manual_decision'] = comparison_df['model_score'] >= manual_thr
+
+    tp_m = np.sum((comparison_df['detection_status'] == 'Both') & comparison_df['manual_decision'])
+    fp_m = np.sum((comparison_df['detection_status'] == 'PhaseNet only') & comparison_df['manual_decision'])
+    fn_m = np.sum((comparison_df['detection_status'] == 'Both') & ~comparison_df['manual_decision'])
+    tn_m = np.sum((comparison_df['detection_status'] == 'PhaseNet only') & ~comparison_df['manual_decision'])
+
+    precision_m = tp_m / (tp_m + fp_m) if (tp_m + fp_m) > 0 else 0
+    recall_m = tp_m / (tp_m + fn_m) if (tp_m + fn_m) > 0 else 0
+    f1_m = 2 * precision_m * recall_m / (precision_m + recall_m) if (precision_m + recall_m) > 0 else 0
+
+    print(f"\nThreshold: {manual_thr:.2f}")
+    print(f"  TP={tp_m}, FP={fp_m}, FN={fn_m}, TN={tn_m}")
+    print(f"  Precision={precision_m:.3f}, Recall={recall_m:.3f}, F1={f1_m:.3f}")
+
 comparison_df.to_csv('SLVT_pick_comparison_batched.csv', index=False)
 print(f"\nResults saved to: SLVT_pick_comparison_batched.csv")
