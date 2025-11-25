@@ -25,6 +25,8 @@ def extract_windows_phasenet(stream, model_name='instance', threshold=0.7, phase
     pick_times = []
     half_samples = window_samples // 2
 
+    peak_probs = []
+
     for peak_idx in peaks:
         pick_time = phase_channel.stats.starttime + peak_idx / phase_channel.stats.sampling_rate
         offset_seconds = pick_time - stream_sync[0].stats.starttime
@@ -43,10 +45,11 @@ def extract_windows_phasenet(stream, model_name='instance', threshold=0.7, phase
 
             windows.append(windowed_stream)
             pick_times.append(pick_time)
+            peak_probs.append(phase_channel.data[peak_idx])
 
-    return windows, pick_times
+    return windows, pick_times, peak_probs
 
-def save_windows(windows, pick_times, output_dir='phasenet_windows', metadata_filename='metadata.csv'):
+def save_windows(windows, pick_times, peak_probs=None, output_dir='phasenet_windows', metadata_filename='metadata.csv'):
     os.makedirs(output_dir, exist_ok=True)
 
     metadata = []
@@ -54,7 +57,7 @@ def save_windows(windows, pick_times, output_dir='phasenet_windows', metadata_fi
         filename = f'window_{i:04d}.mseed'
         window.write(os.path.join(output_dir, filename), format='MSEED')
 
-        metadata.append({
+        meta = {
             'index': i,
             'filename': filename,
             'pick_time': pick_time.isoformat(),
@@ -62,7 +65,12 @@ def save_windows(windows, pick_times, output_dir='phasenet_windows', metadata_fi
             'network': window[0].stats.network,
             'start_time': window[0].stats.starttime.isoformat(),
             'end_time': window[0].stats.endtime.isoformat()
-        })
+        }
+
+        if peak_probs is not None:
+            meta['phasenet_prob'] = peak_probs[i]
+
+        metadata.append(meta)
 
     df = pd.DataFrame(metadata)
     df.to_csv(os.path.join(output_dir, metadata_filename), index=False)
