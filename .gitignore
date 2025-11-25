@@ -1,4 +1,5 @@
 # Byte-compiled / optimized / DLL files
+reproducibility/phasenet_eqt/filtered_phasenet_picks_dir
 reproducibility/continous_results
 reproducibility/bootstrap_results
 #reproducibility/phasenet_eqt
