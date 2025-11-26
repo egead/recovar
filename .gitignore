@@ -1,11 +1,12 @@
 # Byte-compiled / optimized / DLL files
-reproducibility/phasenet_eqt/filtered_phasenet_picks_dir
+reproducibility/phasenet_eqt/filtered_phasenet_picks_dir*
 reproducibility/continous_results
 reproducibility/bootstrap_results
 reproducibility/phasenet_eqt/phasenet_picks
-reproducibility/phasenet_eqt/BALIKESIR_CONTINUOUS_TEST_NOVEMBER
+reproducibility/phasenet_eqt/CONTINUOUS_TESTS
 reproducibility/dataset_exploration.ipynb
 reproducibility/phasenet_eqt/.claude/agents
+reproducibility/phasenet_eqt/*.npz
 
 __pycache__/
 *.py[cod]

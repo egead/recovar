@@ -43,7 +43,8 @@ for date in sorted(date_files.keys()):
         stream,
         model=model,
         phase='P',
-        threshold=LOW_THRESHOLD
+        threshold=LOW_THRESHOLD,
+        window_samples=7000
     )
 
     for i, (window, pick_time, prob) in enumerate(zip(windows, pick_times, peak_probs)):
@@ -132,7 +133,7 @@ print(f"\n=== FINAL PERFORMANCE WITH THRESHOLD {best_threshold:.4f} ===")
 print(f"TP={tp}, FP={fp}, FN={fn}, TN={tn}")
 print(f"Precision={precision:.3f}, Recall={recall:.3f}, F1={best_f1:.3f}")
 
-manual_thresholds = [0.3, 0.5, 0.7, 0.9]
+manual_thresholds = [0.32, 0.4, 0.5]
 print(f"\n=== PERFORMANCE AT MANUAL THRESHOLDS ===")
 for manual_thr in manual_thresholds:
     tp_m = np.sum((labels == 1) & (scores >= manual_thr))
