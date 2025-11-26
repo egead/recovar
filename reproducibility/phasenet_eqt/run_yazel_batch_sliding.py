@@ -198,8 +198,9 @@ print(f"\n=== FINAL PERFORMANCE WITH MAX THRESHOLD {best_threshold_max:.6f} ==="
 print(f"TP={tp_max}, FP={fp_max}, FN={fn_max}, TN={tn_max}")
 print(f"Precision={precision_max:.3f}, Recall={recall_max:.3f}, F1={f1_max:.3f}")
 
-manual_thresholds = [0.05,0.07,0.08]
+manual_thresholds = [0.08, 0.09, 0.10, 0.11, 0.12, 0.13, 0.14]
 print(f"\n=== PERFORMANCE AT MANUAL THRESHOLDS (MEAN SCORES) ===")
+mean_manual_results = []
 for manual_thr in manual_thresholds:
     comparison_df['manual_decision'] = comparison_df['mean_score'] >= manual_thr
 
@@ -212,11 +213,23 @@ for manual_thr in manual_thresholds:
     recall_m = tp_m / (tp_m + fn_m) if (tp_m + fn_m) > 0 else 0
     f1_m = 2 * precision_m * recall_m / (precision_m + recall_m) if (precision_m + recall_m) > 0 else 0
 
+    mean_manual_results.append({
+        'threshold': manual_thr,
+        'tp': tp_m,
+        'fp': fp_m,
+        'fn': fn_m,
+        'tn': tn_m,
+        'precision': precision_m,
+        'recall': recall_m,
+        'f1': f1_m
+    })
+
     print(f"\nThreshold: {manual_thr:.2f}")
     print(f"  TP={tp_m}, FP={fp_m}, FN={fn_m}, TN={tn_m}")
     print(f"  Precision={precision_m:.3f}, Recall={recall_m:.3f}, F1={f1_m:.3f}")
 
 print(f"\n=== PERFORMANCE AT MANUAL THRESHOLDS (MAX SCORES) ===")
+max_manual_results = []
 for manual_thr in manual_thresholds:
     comparison_df['manual_decision'] = comparison_df['max_score'] >= manual_thr
 
@@ -229,15 +242,124 @@ for manual_thr in manual_thresholds:
     recall_m = tp_m / (tp_m + fn_m) if (tp_m + fn_m) > 0 else 0
     f1_m = 2 * precision_m * recall_m / (precision_m + recall_m) if (precision_m + recall_m) > 0 else 0
 
+    max_manual_results.append({
+        'threshold': manual_thr,
+        'tp': tp_m,
+        'fp': fp_m,
+        'fn': fn_m,
+        'tn': tn_m,
+        'precision': precision_m,
+        'recall': recall_m,
+        'f1': f1_m
+    })
+
     print(f"\nThreshold: {manual_thr:.2f}")
     print(f"  TP={tp_m}, FP={fp_m}, FN={fn_m}, TN={tn_m}")
     print(f"  Precision={precision_m:.3f}, Recall={recall_m:.3f}, F1={f1_m:.3f}")
+
+def generate_report(phasenet_threshold, comparison_df, both, phasenet_only,
+                   best_threshold_mean, tp_mean, fp_mean, fn_mean, tn_mean,
+                   precision_mean, recall_mean, f1_mean, mean_manual_results,
+                   best_threshold_max, tp_max, fp_max, fn_max, tn_max,
+                   precision_max, recall_max, f1_max, max_manual_results):
+    """Generate a formatted report and save to text file."""
+
+    report_lines = []
+    report_lines.append("="*70)
+    report_lines.append("YAZEL BATCH SLIDING WINDOW ANALYSIS REPORT")
+    report_lines.append("="*70)
+    report_lines.append("")
+
+    # Configuration
+    report_lines.append(f"PhaseNet Threshold: {phasenet_threshold}")
+    report_lines.append("Sliding window: 60 seconds with 1 sec iterations")
+    report_lines.append("")
+
+    # Detection statistics
+    report_lines.append("-"*70)
+    report_lines.append("DETECTION STATISTICS")
+    report_lines.append("-"*70)
+    report_lines.append(f"    Total windows: {len(comparison_df)}")
+    report_lines.append(f"    Both (catalog + PhaseNet): {len(both)}")
+    report_lines.append(f"    PhaseNet only: {len(phasenet_only)}")
+    report_lines.append(f"    Catalog only: {len(comparison_df[comparison_df['detection_status'] == 'Catalog only'])}")
+    report_lines.append("")
+
+    # MEAN SCORES SECTION
+    report_lines.append("="*70)
+    report_lines.append("SLIDING WINDOW MEAN SCORES")
+    report_lines.append("="*70)
+
+    # Calculate filter percentages for best threshold
+    total_fps = len(phasenet_only)
+    total_tps = len(both)
+    fps_filtered_mean = (tn_mean / total_fps * 100) if total_fps > 0 else 0
+    tps_lost_mean = (fn_mean / total_tps * 100) if total_tps > 0 else 0
+
+    report_lines.append(f"    Best threshold: {best_threshold_mean:.3f}")
+    report_lines.append(f"    Filter out {fps_filtered_mean:.1f}% of FPs, lose {tps_lost_mean:.1f}% of TPs")
+    report_lines.append(f"    TP={tp_mean}, FP={fp_mean}, FN={fn_mean}, TN={tn_mean}")
+    report_lines.append(f"    Precision={precision_mean:.3f}, Recall={recall_mean:.3f}, F1={f1_mean:.3f} (best F1 score)")
+    report_lines.append("")
+    report_lines.append("    Manual thresholds:")
+
+    for result in mean_manual_results:
+        fps_filtered = (result['tn'] / total_fps * 100) if total_fps > 0 else 0
+        tps_lost = (result['fn'] / total_tps * 100) if total_tps > 0 else 0
+        report_lines.append(f"    Threshold {result['threshold']:.2f}: Filter out {fps_filtered:.1f}% of FPs, lose {tps_lost:>5.1f}% of TPs  (F1={result['f1']:.3f})")
+
+    report_lines.append("")
+
+    # MAX SCORES SECTION
+    report_lines.append("="*70)
+    report_lines.append("SLIDING WINDOW MAX SCORES")
+    report_lines.append("="*70)
+
+    # Calculate filter percentages for best threshold
+    fps_filtered_max = (tn_max / total_fps * 100) if total_fps > 0 else 0
+    tps_lost_max = (fn_max / total_tps * 100) if total_tps > 0 else 0
+
+    report_lines.append(f"    Best threshold: {best_threshold_max:.3f}")
+    report_lines.append(f"    Filter out {fps_filtered_max:.1f}% of FPs, lose {tps_lost_max:.1f}% of TPs")
+    report_lines.append(f"    TP={tp_max}, FP={fp_max}, FN={fn_max}, TN={tn_max}")
+    report_lines.append(f"    Precision={precision_max:.3f}, Recall={recall_max:.3f}, F1={f1_max:.3f} (best F1 score)")
+    report_lines.append("")
+    report_lines.append("    Manual thresholds:")
+
+    for result in max_manual_results:
+        fps_filtered = (result['tn'] / total_fps * 100) if total_fps > 0 else 0
+        tps_lost = (result['fn'] / total_tps * 100) if total_tps > 0 else 0
+        report_lines.append(f"    Threshold {result['threshold']:.2f}: Filter out {fps_filtered:.1f}% of FPs, lose {tps_lost:>5.1f}% of TPs  (F1={result['f1']:.3f})")
+
+    report_lines.append("")
+    report_lines.append("="*70)
+    report_lines.append("END OF REPORT")
+    report_lines.append("="*70)
+
+    return "\n".join(report_lines)
+
+# Generate and save report
+report_text = generate_report(
+    PHASENET_THRESHOLD, comparison_df, both, phasenet_only,
+    best_threshold_mean, tp_mean, fp_mean, fn_mean, tn_mean,
+    precision_mean, recall_mean, f1_mean, mean_manual_results,
+    best_threshold_max, tp_max, fp_max, fn_max, tn_max,
+    precision_max, recall_max, f1_max, max_manual_results
+)
+
+report_filename = f'SLVT_yazel_report_thr_{PHASENET_THRESHOLD:.2f}.txt'
+with open(report_filename, 'w') as f:
+    f.write(report_text)
+
+print("\n" + "="*70)
+print(report_text)
+print(f"\n\nReport saved to: {report_filename}")
 
 comparison_df['scores_array_str'] = comparison_df['scores_array'].apply(lambda x: ','.join(map(str, x)))
 comparison_df_to_save = comparison_df.drop(columns=['scores_array'])
 
 comparison_df_to_save.to_csv('SLVT_pick_comparison_sliding.csv', index=False)
-print(f"\nResults saved to: SLVT_pick_comparison_sliding.csv")
+print(f"Results saved to: SLVT_pick_comparison_sliding.csv")
 
 np.savez('SLVT_sliding_scores_arrays.npz',
          filenames=comparison_df['filename'].values,
