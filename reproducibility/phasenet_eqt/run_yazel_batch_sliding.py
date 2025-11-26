@@ -91,29 +91,38 @@ for idx, (file, result) in enumerate(zip(valid_files, results)):
 comparison_df = pd.DataFrame(comparison_data)
 
 analyzed_stations = comparison_df['station'].unique()
-time_min = phasenet_picks['start_time'].min()
-time_max = phasenet_picks['end_time'].max()
-time_min = pd.to_datetime(time_min, format='mixed')
-time_max = pd.to_datetime(time_max, format='mixed')
 
-catalog_in_range = catalog[
-    (catalog['station'].isin(analyzed_stations)) &
-    (catalog['p_arrival_time'] >= time_min) &
-    (catalog['p_arrival_time'] <= time_max)
-]
+catalog_for_stations = catalog[catalog['station'].isin(analyzed_stations)]
 
-total_catalog_picks = len(catalog_in_range)
-phasenet_detected = len(comparison_df[comparison_df['detection_status'] == 'Both'])
-phasenet_missed = total_catalog_picks - phasenet_detected
-phasenet_miss_rate = (phasenet_missed / total_catalog_picks * 100) if total_catalog_picks > 0 else 0
+total_catalog_picks = len(catalog_for_stations)
+
+catalog_picks_detected = []
+catalog_picks_missed = []
+
+for idx, catalog_row in catalog_for_stations.iterrows():
+    station = catalog_row['station']
+    catalog_time = catalog_row['p_arrival_time']
+
+    matching_windows = comparison_df[
+        (comparison_df['station'] == station) &
+        (comparison_df['catalog_pick'] == catalog_time)
+    ]
+
+    if len(matching_windows) > 0:
+        catalog_picks_detected.append(catalog_row)
+    else:
+        catalog_picks_missed.append(catalog_row)
+
+phasenet_detected = len(catalog_picks_detected)
+phasenet_missed = len(catalog_picks_missed)
 phasenet_detection_rate = (phasenet_detected / total_catalog_picks * 100) if total_catalog_picks > 0 else 0
+phasenet_miss_rate = (phasenet_missed / total_catalog_picks * 100) if total_catalog_picks > 0 else 0
 
 print("\n=== CATALOG STATISTICS ===\n")
 print(f"Analyzed stations: {len(analyzed_stations)}")
-print(f"Time range: {time_min} to {time_max}")
-print(f"Total catalog picks in range: {total_catalog_picks}")
-print(f"PhaseNet detected: {phasenet_detected} ({phasenet_detection_rate:.1f}%)")
-print(f"PhaseNet missed: {phasenet_missed} ({phasenet_miss_rate:.1f}%)")
+print(f"Total catalog P-picks for these stations: {total_catalog_picks}")
+print(f"PhaseNet detected (TP): {phasenet_detected} ({phasenet_detection_rate:.1f}%)")
+print(f"PhaseNet missed (FN): {phasenet_missed} ({phasenet_miss_rate:.1f}%)")
 
 print("\n=== DETECTION STATISTICS ===\n")
 print(f"Total windows: {len(comparison_df)}")
@@ -297,16 +306,34 @@ def generate_report(phasenet_threshold, comparison_df, both, phasenet_only,
     report_lines.append("="*70)
     report_lines.append("")
 
+    report_lines.append("LEGEND:")
+    report_lines.append("-"*70)
+    report_lines.append("CATALOG STATISTICS:")
+    report_lines.append("  - Shows PhaseNet's performance against ground truth catalog")
+    report_lines.append("  - PhaseNet detected: Catalog events that PhaseNet found")
+    report_lines.append("  - PhaseNet missed: Catalog events that PhaseNet completely missed")
+    report_lines.append("  - These events cannot be recovered by RECOVAR filtering")
+    report_lines.append("")
+    report_lines.append("RECOVAR FILTER PERFORMANCE (TP/FP/FN/TN):")
+    report_lines.append("  - Evaluates RECOVAR's ability to filter PhaseNet picks")
+    report_lines.append("  - TP (True Positive): PhaseNet pick with catalog event, RECOVAR kept it")
+    report_lines.append("  - FP (False Positive): PhaseNet pick without catalog event, RECOVAR kept it")
+    report_lines.append("  - FN (False Negative): PhaseNet pick with catalog event, RECOVAR rejected it")
+    report_lines.append("  - TN (True Negative): PhaseNet pick without catalog event, RECOVAR rejected it")
+    report_lines.append("")
+    report_lines.append("="*70)
+    report_lines.append("")
+
     report_lines.append(f"PhaseNet Threshold: {phasenet_threshold}")
     report_lines.append("Sliding window: 60 seconds with 1 sec iterations")
     report_lines.append("")
 
     report_lines.append("-"*70)
-    report_lines.append("CATALOG STATISTICS")
+    report_lines.append("CATALOG STATISTICS (PhaseNet Baseline Performance)")
     report_lines.append("-"*70)
-    report_lines.append(f"    Total catalog picks in analyzed range: {total_catalog_picks}")
-    report_lines.append(f"    PhaseNet detected: {phasenet_detected} ({phasenet_detection_rate:.1f}%)")
-    report_lines.append(f"    PhaseNet missed: {phasenet_missed} ({phasenet_miss_rate:.1f}%)")
+    report_lines.append(f"    Total catalog P-picks for analyzed stations: {total_catalog_picks}")
+    report_lines.append(f"    PhaseNet detected (True Positives): {phasenet_detected} ({phasenet_detection_rate:.1f}%)")
+    report_lines.append(f"    PhaseNet missed (False Negatives): {phasenet_missed} ({phasenet_miss_rate:.1f}%)")
     report_lines.append("")
 
     report_lines.append("-"*70)
