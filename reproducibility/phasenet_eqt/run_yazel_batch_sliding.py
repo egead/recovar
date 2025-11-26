@@ -90,6 +90,31 @@ for idx, (file, result) in enumerate(zip(valid_files, results)):
 
 comparison_df = pd.DataFrame(comparison_data)
 
+analyzed_stations = comparison_df['station'].unique()
+time_min = phasenet_picks['start_time'].min()
+time_max = phasenet_picks['end_time'].max()
+time_min = pd.to_datetime(time_min, format='mixed')
+time_max = pd.to_datetime(time_max, format='mixed')
+
+catalog_in_range = catalog[
+    (catalog['station'].isin(analyzed_stations)) &
+    (catalog['p_arrival_time'] >= time_min) &
+    (catalog['p_arrival_time'] <= time_max)
+]
+
+total_catalog_picks = len(catalog_in_range)
+phasenet_detected = len(comparison_df[comparison_df['detection_status'] == 'Both'])
+phasenet_missed = total_catalog_picks - phasenet_detected
+phasenet_miss_rate = (phasenet_missed / total_catalog_picks * 100) if total_catalog_picks > 0 else 0
+phasenet_detection_rate = (phasenet_detected / total_catalog_picks * 100) if total_catalog_picks > 0 else 0
+
+print("\n=== CATALOG STATISTICS ===\n")
+print(f"Analyzed stations: {len(analyzed_stations)}")
+print(f"Time range: {time_min} to {time_max}")
+print(f"Total catalog picks in range: {total_catalog_picks}")
+print(f"PhaseNet detected: {phasenet_detected} ({phasenet_detection_rate:.1f}%)")
+print(f"PhaseNet missed: {phasenet_missed} ({phasenet_miss_rate:.1f}%)")
+
 print("\n=== DETECTION STATISTICS ===\n")
 print(f"Total windows: {len(comparison_df)}")
 
@@ -261,7 +286,9 @@ def generate_report(phasenet_threshold, comparison_df, both, phasenet_only,
                    best_threshold_mean, tp_mean, fp_mean, fn_mean, tn_mean,
                    precision_mean, recall_mean, f1_mean, mean_manual_results,
                    best_threshold_max, tp_max, fp_max, fn_max, tn_max,
-                   precision_max, recall_max, f1_max, max_manual_results):
+                   precision_max, recall_max, f1_max, max_manual_results,
+                   total_catalog_picks, phasenet_detected, phasenet_missed,
+                   phasenet_detection_rate, phasenet_miss_rate):
     """Generate a formatted report and save to text file."""
 
     report_lines = []
@@ -270,12 +297,18 @@ def generate_report(phasenet_threshold, comparison_df, both, phasenet_only,
     report_lines.append("="*70)
     report_lines.append("")
 
-    # Configuration
     report_lines.append(f"PhaseNet Threshold: {phasenet_threshold}")
     report_lines.append("Sliding window: 60 seconds with 1 sec iterations")
     report_lines.append("")
 
-    # Detection statistics
+    report_lines.append("-"*70)
+    report_lines.append("CATALOG STATISTICS")
+    report_lines.append("-"*70)
+    report_lines.append(f"    Total catalog picks in analyzed range: {total_catalog_picks}")
+    report_lines.append(f"    PhaseNet detected: {phasenet_detected} ({phasenet_detection_rate:.1f}%)")
+    report_lines.append(f"    PhaseNet missed: {phasenet_missed} ({phasenet_miss_rate:.1f}%)")
+    report_lines.append("")
+
     report_lines.append("-"*70)
     report_lines.append("DETECTION STATISTICS")
     report_lines.append("-"*70)
@@ -285,12 +318,10 @@ def generate_report(phasenet_threshold, comparison_df, both, phasenet_only,
     report_lines.append(f"    Catalog only: {len(comparison_df[comparison_df['detection_status'] == 'Catalog only'])}")
     report_lines.append("")
 
-    # MEAN SCORES SECTION
     report_lines.append("="*70)
     report_lines.append("SLIDING WINDOW MEAN SCORES")
     report_lines.append("="*70)
 
-    # Calculate filter percentages for best threshold
     total_fps = len(phasenet_only)
     total_tps = len(both)
     fps_filtered_mean = (tn_mean / total_fps * 100) if total_fps > 0 else 0
@@ -310,12 +341,10 @@ def generate_report(phasenet_threshold, comparison_df, both, phasenet_only,
 
     report_lines.append("")
 
-    # MAX SCORES SECTION
     report_lines.append("="*70)
     report_lines.append("SLIDING WINDOW MAX SCORES")
     report_lines.append("="*70)
 
-    # Calculate filter percentages for best threshold
     fps_filtered_max = (tn_max / total_fps * 100) if total_fps > 0 else 0
     tps_lost_max = (fn_max / total_tps * 100) if total_tps > 0 else 0
 
@@ -338,13 +367,14 @@ def generate_report(phasenet_threshold, comparison_df, both, phasenet_only,
 
     return "\n".join(report_lines)
 
-# Generate and save report
 report_text = generate_report(
     PHASENET_THRESHOLD, comparison_df, both, phasenet_only,
     best_threshold_mean, tp_mean, fp_mean, fn_mean, tn_mean,
     precision_mean, recall_mean, f1_mean, mean_manual_results,
     best_threshold_max, tp_max, fp_max, fn_max, tn_max,
-    precision_max, recall_max, f1_max, max_manual_results
+    precision_max, recall_max, f1_max, max_manual_results,
+    total_catalog_picks, phasenet_detected, phasenet_missed,
+    phasenet_detection_rate, phasenet_miss_rate
 )
 
 report_filename = f'SLVT_yazel_report_thr_{PHASENET_THRESHOLD:.2f}.txt'
