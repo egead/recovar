@@ -4,8 +4,8 @@ reproducibility/continous_results
 reproducibility/bootstrap_results
 reproducibility/phasenet_eqt/phasenet_picks
 reproducibility/phasenet_eqt/CONTINUOUS_TESTS
+reproducibility/phasenet_eqt/*.txt
 reproducibility/dataset_exploration.ipynb
-reproducibility/phasenet_eqt/.claude/agents
 reproducibility/phasenet_eqt/*.npz
 
 __pycache__/

@@ -44,7 +44,8 @@ for date in sorted(date_files.keys()):
         model=model,
         phase='P',
         threshold=LOW_THRESHOLD,
-        window_samples=7000
+        window_samples=7000,
+        overlap=0.90
     )
 
     for i, (window, pick_time, prob) in enumerate(zip(windows, pick_times, peak_probs)):

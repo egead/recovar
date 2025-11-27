@@ -5,7 +5,7 @@ import os
 import seisbench.models as sbm
 from scipy.signal import find_peaks
 
-def extract_windows_phasenet(stream, model=None, model_name='instance', threshold=0.3, phase='P', window_samples=7000):
+def extract_windows_phasenet(stream, model=None, model_name='instance', threshold=0.3, phase='P', window_samples=7000, overlap=0.90):
     if model is None:
         model = sbm.PhaseNet.from_pretrained(model_name)
 
@@ -18,7 +18,7 @@ def extract_windows_phasenet(stream, model=None, model_name='instance', threshol
         fill_value=0
     )
 
-    annotations = model.annotate(stream_sync)
+    annotations = model.annotate(stream_sync, overlap=overlap)
     phase_channel = [tr for tr in annotations if tr.stats.channel.endswith(phase)][0]
     peaks, _ = find_peaks(phase_channel.data, height=threshold, distance=100)
 
