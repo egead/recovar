@@ -7,7 +7,7 @@ reproducibility/phasenet_eqt/CONTINUOUS_TESTS
 reproducibility/phasenet_eqt/*.txt
 reproducibility/dataset_exploration.ipynb
 reproducibility/phasenet_eqt/*.npz
-
+reproducibility/phasenet_eqt/phasenet_picks_noslide
 __pycache__/
 *.py[cod]
 *$py.class

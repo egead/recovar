@@ -6,7 +6,7 @@ from yazel_integration_sliding import recovar_pick_cleaner_sliding_batch, load_r
 
 MODEL_PATH = '/mnt/data_a/ege/recovar_models/exp_instance/representation_learning_autoencoder_ensemble/instance/split0/ep19.h5'
 
-PHASENET_THRESHOLD = 0.33
+PHASENET_THRESHOLD = 0.50
 
 phasenet_pick_dir = f"filtered_phasenet_picks_dir_thr_{PHASENET_THRESHOLD:.2f}"
 

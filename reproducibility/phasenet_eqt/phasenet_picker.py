@@ -18,7 +18,13 @@ def extract_windows_phasenet(stream, model=None, model_name='instance', threshol
         fill_value=0
     )
 
-    annotations = model.annotate(stream_sync, overlap=overlap)
+    if 0 < overlap < 1:
+        overlap_samples = int(overlap * 3001)
+    else:
+        overlap_samples = int(overlap)
+
+    annotations = model.annotate(stream_sync, overlap=overlap_samples)
+    #annotations = model.annotate(stream_sync, overlap=overlap)
     phase_channel = [tr for tr in annotations if tr.stats.channel.endswith(phase)][0]
     peaks, _ = find_peaks(phase_channel.data, height=threshold, distance=100)
 
