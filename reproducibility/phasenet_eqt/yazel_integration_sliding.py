@@ -115,7 +115,7 @@ def recovar_pick_cleaner_sliding(stream, classifier, window_size=3000, stride=10
     n_trimmed = n_processed[trim_samples:-trim_samples]
     z_trimmed = z_processed[trim_samples:-trim_samples]
 
-    n_windows = (len(e_trimmed) - window_size) // stride + 1
+    n_windows = (len(e_trimmed) - window_size) // stride 
 
     waveforms = []
     for i in range(n_windows):
@@ -138,95 +138,3 @@ def recovar_pick_cleaner_sliding(stream, classifier, window_size=3000, stride=10
         'mean_score': np.mean(scores),
         'max_score': np.max(scores)
     }
-
-
-def recovar_pick_cleaner_sliding_batch(streams, classifier, batch_size=256, window_size=3000,
-                                        stride=100, trim_samples=500, sampling_rate=100.0,
-                                        channel_pattern="H*", freqmin=1.0, freqmax=20.0):
-    """
-    Applies RECOVAR classifier to multiple obspy.Stream objects using sliding windows in batches.
-
-    :param streams: List of obspy.Stream objects with 3 components (E, N, Z) each
-    :param classifier: RECOVAR classifier instance (ClassifierMultipleAutoencoder)
-    :param batch_size: Number of windows to process at once (default: 256)
-    :param window_size: Window size in samples (default: 3000 = 30 seconds at 100 Hz)
-    :param stride: Stride in samples (default: 100 = 1 second at 100 Hz)
-    :param trim_samples: Samples to trim from each end after preprocessing (default: 500 = 5 seconds)
-    :param sampling_rate: Expected sampling rate in Hz (default: 100.0)
-    :param channel_pattern: Channel pattern prefix (default: "H*")
-    :param freqmin: Minimum frequency for bandpass filter in Hz (default: 1.0)
-    :param freqmax: Maximum frequency for bandpass filter in Hz (default: 20.0)
-    :return: List of dictionaries with 'scores_array', 'mean_score', 'max_score' for each stream
-    """
-    all_waveforms = []
-    window_counts = []
-
-    for stream in streams:
-        validate_stream(stream, sampling_rate=sampling_rate, channel_pattern=channel_pattern,
-                    window_size=window_size, trim_samples=trim_samples)
-
-        for tr in stream:
-            tr.data = tr.data.astype(np.float32)
-
-        z_trace = stream.select(channel=f"{channel_pattern}Z")[0]
-        n_trace = stream.select(channel=f"{channel_pattern}N")[0]
-        e_trace = stream.select(channel=f"{channel_pattern}E")[0]
-
-        e_processed = preprocess(e_trace.data, sampling_rate=sampling_rate, freqmin=freqmin, freqmax=freqmax)
-        n_processed = preprocess(n_trace.data, sampling_rate=sampling_rate, freqmin=freqmin, freqmax=freqmax)
-        z_processed = preprocess(z_trace.data, sampling_rate=sampling_rate, freqmin=freqmin, freqmax=freqmax)
-
-        e_trimmed = e_processed[trim_samples:-trim_samples]
-        n_trimmed = n_processed[trim_samples:-trim_samples]
-        z_trimmed = z_processed[trim_samples:-trim_samples] 
-
-        n_windows = (len(e_trimmed) - window_size) // stride + 1
-        window_counts.append(n_windows)
-
-        for i in range(n_windows):
-            start_idx = i * stride
-            end_idx = start_idx + window_size
-
-            e_window = e_trimmed[start_idx:end_idx]
-            n_window = n_trimmed[start_idx:end_idx]
-            z_window = z_trimmed[start_idx:end_idx]
-
-            waveform = np.stack([e_window, n_window, z_window], axis=-1)
-            all_waveforms.append(waveform)
-
-    all_waveforms = np.array(all_waveforms)
-    n_samples = len(all_waveforms)
-    n_complete_batches = n_samples // batch_size
-    remainder = n_samples % batch_size
-
-    all_scores = []
-
-    for i in range(n_complete_batches):
-        batch = all_waveforms[i * batch_size:(i + 1) * batch_size]
-        batch_results = classifier(batch)
-        all_scores.extend(batch_results)
-
-    if remainder > 0:
-        last_batch = all_waveforms[n_complete_batches * batch_size:]
-        padding = np.zeros((batch_size - remainder, window_size, 3), dtype=np.float32)
-        padded_batch = np.concatenate([last_batch, padding], axis=0)
-        batch_results = classifier(padded_batch)
-        all_scores.extend(batch_results[:remainder])
-
-    all_scores = np.array(all_scores)
-
-    results = []
-    start_idx = 0
-    for n_windows in window_counts:
-        end_idx = start_idx + n_windows
-        stream_scores = all_scores[start_idx:end_idx]
-
-        results.append({
-            'scores_array': stream_scores,
-            'mean_score': np.mean(stream_scores),
-            'max_score': np.max(stream_scores)
-        })
-
-        start_idx = end_idx
-
-    return results
