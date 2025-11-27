@@ -39,7 +39,7 @@ for date in sorted(date_files.keys()):
         stream += obspy.read(str(f))
     stream.merge(method=1, fill_value=0)
 
-    windows, pick_times, peak_probs = extract_windows_phasenet(
+    windows, pick_times, peak_probs, annotation_windows = extract_windows_phasenet(
         stream,
         model=model,
         phase='P',
@@ -50,7 +50,13 @@ for date in sorted(date_files.keys()):
 
     for i, (window, pick_time, prob) in enumerate(zip(windows, pick_times, peak_probs)):
         filename = f'window_{date}_{i:04d}.mseed'
-        window.write(os.path.join(temp_phasenet_picks_dir, filename), format='MSEED')
+
+        # Combine waveforms and annotations into single stream
+        combined_stream = window.copy()
+        for tr in annotation_windows[i]:
+            combined_stream.append(tr)
+
+        combined_stream.write(os.path.join(temp_phasenet_picks_dir, filename), format='MSEED')
 
         all_metadata.append({
             'phase': 'P',

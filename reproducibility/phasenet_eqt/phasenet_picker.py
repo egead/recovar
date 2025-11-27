@@ -27,6 +27,7 @@ def extract_windows_phasenet(stream, model=None, model_name='instance', threshol
     half_samples = window_samples // 2
 
     peak_probs = []
+    annotation_windows = []
 
     for peak_idx in peaks:
         pick_time = phase_channel.stats.starttime + peak_idx / phase_channel.stats.sampling_rate
@@ -37,6 +38,7 @@ def extract_windows_phasenet(stream, model=None, model_name='instance', threshol
         end_sample = start_sample + window_samples
 
         if start_sample >= 0 and end_sample <= len(stream_sync[0].data):
+            # Extract waveform window
             windowed_stream = obspy.Stream()
             for tr in stream_sync:
                 windowed = tr.copy()
@@ -44,19 +46,35 @@ def extract_windows_phasenet(stream, model=None, model_name='instance', threshol
                 windowed.stats.starttime = tr.stats.starttime + start_sample / tr.stats.sampling_rate
                 windowed_stream.append(windowed)
 
+            # Extract corresponding annotation window (P, S, N probabilities)
+            windowed_annotations = obspy.Stream()
+            for tr in annotations:
+                windowed_ann = tr.copy()
+                windowed_ann.data = tr.data[start_sample:end_sample]
+                windowed_ann.stats.starttime = tr.stats.starttime + start_sample / tr.stats.sampling_rate
+                windowed_annotations.append(windowed_ann)
+
             windows.append(windowed_stream)
+            annotation_windows.append(windowed_annotations)
             pick_times.append(pick_time)
             peak_probs.append(phase_channel.data[peak_idx])
 
-    return windows, pick_times, peak_probs
+    return windows, pick_times, peak_probs, annotation_windows
 
-def save_windows(windows, pick_times, peak_probs=None, output_dir='phasenet_windows', metadata_filename='metadata.csv'):
+def save_windows(windows, pick_times, peak_probs=None, annotation_windows=None, output_dir='phasenet_windows', metadata_filename='metadata.csv'):
     os.makedirs(output_dir, exist_ok=True)
 
     metadata = []
     for i, (window, pick_time) in enumerate(zip(windows, pick_times)):
         filename = f'window_{i:04d}.mseed'
-        window.write(os.path.join(output_dir, filename), format='MSEED')
+
+        # Combine waveforms and annotations into single stream
+        combined_stream = window.copy()
+        if annotation_windows is not None and i < len(annotation_windows):
+            for tr in annotation_windows[i]:
+                combined_stream.append(tr)
+
+        combined_stream.write(os.path.join(output_dir, filename), format='MSEED')
 
         meta = {
             'index': i,
