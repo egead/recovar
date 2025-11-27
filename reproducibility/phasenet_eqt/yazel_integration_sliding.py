@@ -64,7 +64,7 @@ def validate_stream(stream, sampling_rate=100.0, channel_pattern="H*", window_si
     duration_samples = lengths[0]
     min_samples = window_size + 2 * trim_samples
     min_duration_seconds = min_samples / sampling_rate
-
+# TODO: start endtime check 
     if duration_samples < min_samples:
         actual_duration = duration_samples / sampling_rate
         raise ValueError(
@@ -96,6 +96,7 @@ def recovar_pick_cleaner_sliding(stream, classifier, window_size=3000, stride=10
     :param freqmax: Maximum frequency for bandpass filter in Hz (default: 20.0)
     :return: Dictionary with 'scores_array' (np.array), 'mean_score' (float), 'max_score' (float)
     """
+    #Make window size global variable and sampling rate freqmin freqmax bandpass
 
     validate_stream(stream, sampling_rate=sampling_rate, channel_pattern=channel_pattern,
                     window_size=window_size, trim_samples=trim_samples)
@@ -115,7 +116,7 @@ def recovar_pick_cleaner_sliding(stream, classifier, window_size=3000, stride=10
     n_trimmed = n_processed[trim_samples:-trim_samples]
     z_trimmed = z_processed[trim_samples:-trim_samples]
 
-    n_windows = (len(e_trimmed) - window_size) // stride 
+    n_windows = (len(e_trimmed) - window_size) // stride + 1 
 
     waveforms = []
     for i in range(n_windows):
