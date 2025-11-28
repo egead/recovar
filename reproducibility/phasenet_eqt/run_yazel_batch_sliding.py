@@ -2,7 +2,7 @@ import obspy
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from yazel_integration_sliding import recovar_pick_cleaner_sliding_batch, load_recovar_classifier
+from yazel_integration_sliding import recovar_pick_cleaner_sliding, load_recovar_classifier
 
 MODEL_PATH = '/mnt/data_a/ege/recovar_models/exp_instance/representation_learning_autoencoder_ensemble/instance/split0/ep19.h5'
 
@@ -38,8 +38,13 @@ for file in files:
 
 print(f"Loaded {len(streams)} waveforms")
 
-print("Processing with sliding windows in batches of 256...")
-results = recovar_pick_cleaner_sliding_batch(streams=streams, classifier=classifier, batch_size=256)
+print("Processing with sliding windows...")
+results = []
+for i, stream in enumerate(streams):
+    if (i + 1) % 10 == 0:
+        print(f"Processing {i + 1}/{len(streams)}...")
+    result = recovar_pick_cleaner_sliding(stream=stream, classifier=classifier)
+    results.append(result)
 
 print("Creating comparison data...")
 comparison_data = []
