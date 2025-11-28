@@ -76,6 +76,7 @@ def preprocess_and_save(phasenet_pick_dir, catalog_path, model_path, output_dir,
     # Process and save TRUE PICKS
     print("\nProcessing TRUE PICKS with RECOVAR...")
     truepicks_metadata = []
+    truepicks_scores = []  # Store full scores arrays separately
     batch_size = 32
 
     for batch_start in range(0, len(tp_examples), batch_size):
@@ -106,9 +107,16 @@ def preprocess_and_save(phasenet_pick_dir, catalog_path, model_path, output_dir,
                 'max_score': result['max_score']
             })
 
+            # Save scores array
+            truepicks_scores.append({
+                'filename': example['file'].name,
+                'scores_array': result['scores_array'].tolist()
+            })
+
     # Process and save FALSE PICKS
     print("\nProcessing FALSE PICKS with RECOVAR...")
     falsepicks_metadata = []
+    falsepicks_scores = []  # Store full scores arrays separately
 
     for batch_start in range(0, len(fp_examples), batch_size):
         batch_end = min(batch_start + batch_size, len(fp_examples))
@@ -138,14 +146,28 @@ def preprocess_and_save(phasenet_pick_dir, catalog_path, model_path, output_dir,
                 'max_score': result['max_score']
             })
 
+            # Save scores array
+            falsepicks_scores.append({
+                'filename': example['file'].name,
+                'scores_array': result['scores_array'].tolist()
+            })
+
     # Save metadata CSVs
     pd.DataFrame(truepicks_metadata).to_csv(output_path / 'truepicks_metadata.csv', index=False)
     pd.DataFrame(falsepicks_metadata).to_csv(output_path / 'falsepicks_metadata.csv', index=False)
+
+    # Save scores arrays as JSON
+    import json
+    with open(output_path / 'truepicks_scores.json', 'w') as f:
+        json.dump(truepicks_scores, f)
+    with open(output_path / 'falsepicks_scores.json', 'w') as f:
+        json.dump(falsepicks_scores, f)
 
     print(f"\nPreprocessed data saved to: {output_path}")
     print(f"  - {len(tp_examples)} TRUE PICK examples in {truepicks_dir}")
     print(f"  - {len(fp_examples)} FALSE PICK examples in {falsepicks_dir}")
     print(f"  - Metadata saved with RECOVAR scores")
+    print(f"  - Full scores arrays saved to JSON files")
 
 
 if __name__ == '__main__':

@@ -111,6 +111,7 @@ def load_preprocessed_data(preprocessed_dir, precompute_phasenet=True):
     """
     from demo_plotting import get_phasenet_probabilities
     import numpy as np
+    import json
 
     preprocessed_path = Path(preprocessed_dir)
     truepicks_dir = preprocessed_path / 'truepicks'
@@ -119,6 +120,16 @@ def load_preprocessed_data(preprocessed_dir, precompute_phasenet=True):
     # Load metadata
     tp_metadata = pd.read_csv(preprocessed_path / 'truepicks_metadata.csv')
     fp_metadata = pd.read_csv(preprocessed_path / 'falsepicks_metadata.csv')
+
+    # Load scores arrays
+    with open(preprocessed_path / 'truepicks_scores.json', 'r') as f:
+        tp_scores_data = json.load(f)
+    with open(preprocessed_path / 'falsepicks_scores.json', 'r') as f:
+        fp_scores_data = json.load(f)
+
+    # Create filename to scores_array mapping
+    tp_scores_map = {item['filename']: np.array(item['scores_array']) for item in tp_scores_data}
+    fp_scores_map = {item['filename']: np.array(item['scores_array']) for item in fp_scores_data}
 
     # Convert datetime columns
     tp_metadata['phasenet_pick'] = pd.to_datetime(tp_metadata['phasenet_pick'])
@@ -153,13 +164,12 @@ def load_preprocessed_data(preprocessed_dir, precompute_phasenet=True):
         if precompute_phasenet:
             example['phasenet_result'] = get_phasenet_probabilities(stream)
 
-        # Create recovar_result for plotting (with dummy scores_array)
-        n_windows = 10
-        scores = np.linspace(0.01, row['max_score'], n_windows)
+        # Load actual RECOVAR scores array
+        scores_array = tp_scores_map[row['filename']]
         example['recovar_result'] = {
             'max_score': row['max_score'],
             'mean_score': row['mean_score'],
-            'scores_array': scores
+            'scores_array': scores_array
         }
 
         tp_examples.append(example)
@@ -187,13 +197,12 @@ def load_preprocessed_data(preprocessed_dir, precompute_phasenet=True):
         if precompute_phasenet:
             example['phasenet_result'] = get_phasenet_probabilities(stream)
 
-        # Create recovar_result for plotting (with dummy scores_array)
-        n_windows = 10
-        scores = np.linspace(0.01, row['max_score'], n_windows)
+        # Load actual RECOVAR scores array
+        scores_array = fp_scores_map[row['filename']]
         example['recovar_result'] = {
             'max_score': row['max_score'],
             'mean_score': row['mean_score'],
-            'scores_array': scores
+            'scores_array': scores_array
         }
 
         fp_examples.append(example)
