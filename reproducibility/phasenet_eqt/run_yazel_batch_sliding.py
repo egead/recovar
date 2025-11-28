@@ -3,7 +3,8 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from yazel_integration_sliding import recovar_pick_cleaner_sliding, load_recovar_classifier
-
+import os
+os.environ['CUDA_VISIBLE_DEVICES']='-1'
 MODEL_PATH = '/mnt/data_a/ege/recovar_models/exp_instance/representation_learning_autoencoder_ensemble/instance/split0/ep19.h5'
 
 PHASENET_THRESHOLD = 0.32
