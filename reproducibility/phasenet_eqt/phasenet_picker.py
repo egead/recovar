@@ -38,7 +38,6 @@ def extract_windows_phasenet(stream, model=None, model_name='instance', threshol
         end_sample = start_sample + window_samples
 
         if start_sample >= 0 and end_sample <= len(stream_sync[0].data):
-            # Extract waveform window
             windowed_stream = obspy.Stream()
             for tr in stream_sync:
                 windowed = tr.copy()
@@ -46,7 +45,6 @@ def extract_windows_phasenet(stream, model=None, model_name='instance', threshol
                 windowed.stats.starttime = tr.stats.starttime + start_sample / tr.stats.sampling_rate
                 windowed_stream.append(windowed)
 
-            # Extract corresponding annotation window (P, S, N probabilities)
             windowed_annotations = obspy.Stream()
             for tr in annotations:
                 windowed_ann = tr.copy()
@@ -68,11 +66,13 @@ def save_windows(windows, pick_times, peak_probs=None, annotation_windows=None, 
     for i, (window, pick_time) in enumerate(zip(windows, pick_times)):
         filename = f'window_{i:04d}.mseed'
 
-        # Combine waveforms and annotations into single stream
         combined_stream = window.copy()
         if annotation_windows is not None and i < len(annotation_windows):
             for tr in annotation_windows[i]:
-                combined_stream.append(tr)
+                if tr.stats.channel.endswith('P'):
+                    tr.stats.channel = 'MXP'  # M=misc, X=synthetic/derived, P=P-wave probability
+                    combined_stream.append(tr)
+                    break  
 
         combined_stream.write(os.path.join(output_dir, filename), format='MSEED')
 
