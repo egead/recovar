@@ -89,7 +89,7 @@ def load_example_picks(phasenet_pick_dir, catalog, max_files=None, min_tp=3, min
     return tp_examples, fp_examples
 
 
-def load_preprocessed_data(preprocessed_dir):
+def load_preprocessed_data(preprocessed_dir, precompute_phasenet=True):
     """
     Load preprocessed demo data from truepicks/falsepicks directories.
 
@@ -97,6 +97,8 @@ def load_preprocessed_data(preprocessed_dir):
     ----------
     preprocessed_dir : str
         Directory containing preprocessed truepicks/ and falsepicks/ subdirectories
+    precompute_phasenet : bool, optional
+        If True, precompute PhaseNet probabilities for all examples (default: True)
 
     Returns
     -------
@@ -107,6 +109,9 @@ def load_preprocessed_data(preprocessed_dir):
         - tp_metadata: DataFrame with RECOVAR scores for true picks
         - fp_metadata: DataFrame with RECOVAR scores for false picks
     """
+    from demo_plotting import get_phasenet_probabilities
+    import numpy as np
+
     preprocessed_path = Path(preprocessed_dir)
     truepicks_dir = preprocessed_path / 'truepicks'
     falsepicks_dir = preprocessed_path / 'falsepicks'
@@ -127,37 +132,71 @@ def load_preprocessed_data(preprocessed_dir):
 
     # Load true picks
     tp_examples = []
-    for _, row in tp_metadata.iterrows():
+    for idx, row in tp_metadata.iterrows():
         file_path = truepicks_dir / row['filename']
         stream = obspy.read(str(file_path))
         stream.merge()
 
-        tp_examples.append({
+        example = {
             'file': file_path,
             'stream': stream,
             'station': row['station'],
             'phasenet_pick': row['phasenet_pick'],
             'catalog_pick': row['catalog_pick'],
             'window_start': row['window_start'],
-            'window_end': row['window_end']
-        })
+            'window_end': row['window_end'],
+            'max_score': row['max_score'],
+            'mean_score': row['mean_score']
+        }
+
+        # Precompute PhaseNet probabilities if requested
+        if precompute_phasenet:
+            example['phasenet_result'] = get_phasenet_probabilities(stream)
+
+        # Create recovar_result for plotting (with dummy scores_array)
+        n_windows = 10
+        scores = np.linspace(0.01, row['max_score'], n_windows)
+        example['recovar_result'] = {
+            'max_score': row['max_score'],
+            'mean_score': row['mean_score'],
+            'scores_array': scores
+        }
+
+        tp_examples.append(example)
 
     # Load false picks
     fp_examples = []
-    for _, row in fp_metadata.iterrows():
+    for idx, row in fp_metadata.iterrows():
         file_path = falsepicks_dir / row['filename']
         stream = obspy.read(str(file_path))
         stream.merge()
 
-        fp_examples.append({
+        example = {
             'file': file_path,
             'stream': stream,
             'station': row['station'],
             'phasenet_pick': row['phasenet_pick'],
             'catalog_pick': None,
             'window_start': row['window_start'],
-            'window_end': row['window_end']
-        })
+            'window_end': row['window_end'],
+            'max_score': row['max_score'],
+            'mean_score': row['mean_score']
+        }
+
+        # Precompute PhaseNet probabilities if requested
+        if precompute_phasenet:
+            example['phasenet_result'] = get_phasenet_probabilities(stream)
+
+        # Create recovar_result for plotting (with dummy scores_array)
+        n_windows = 10
+        scores = np.linspace(0.01, row['max_score'], n_windows)
+        example['recovar_result'] = {
+            'max_score': row['max_score'],
+            'mean_score': row['mean_score'],
+            'scores_array': scores
+        }
+
+        fp_examples.append(example)
 
     return tp_examples, fp_examples, tp_metadata, fp_metadata
 

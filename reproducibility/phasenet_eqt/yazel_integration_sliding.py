@@ -139,3 +139,70 @@ def recovar_pick_cleaner_sliding(stream, classifier, window_size=3000, stride=10
         'mean_score': np.mean(scores),
         'max_score': np.max(scores)
     }
+
+
+def recovar_pick_cleaner_sliding_batch(streams, classifier, window_size=3000, stride=100,
+                                        trim_samples=500, sampling_rate=100.0, channel_pattern="H*",
+                                        freqmin=1.0, freqmax=20.0):
+    """
+    Batch version of recovar_pick_cleaner_sliding for processing multiple streams efficiently.
+
+    :param streams: List of obspy.Stream objects
+    :param classifier: RECOVAR classifier instance
+    :return: List of dictionaries with scores for each stream
+    """
+    all_waveforms = []
+    stream_window_counts = []
+
+    # Process all streams and collect waveforms
+    for stream in streams:
+        validate_stream(stream, sampling_rate=sampling_rate, channel_pattern=channel_pattern,
+                       window_size=window_size, trim_samples=trim_samples)
+
+        for tr in stream:
+            tr.data = tr.data.astype(np.float32)
+
+        z_trace = stream.select(channel=f"{channel_pattern}Z")[0]
+        n_trace = stream.select(channel=f"{channel_pattern}N")[0]
+        e_trace = stream.select(channel=f"{channel_pattern}E")[0]
+
+        e_processed = preprocess(e_trace.data, sampling_rate=sampling_rate, freqmin=freqmin, freqmax=freqmax)
+        n_processed = preprocess(n_trace.data, sampling_rate=sampling_rate, freqmin=freqmin, freqmax=freqmax)
+        z_processed = preprocess(z_trace.data, sampling_rate=sampling_rate, freqmin=freqmin, freqmax=freqmax)
+
+        e_trimmed = e_processed[trim_samples:-trim_samples]
+        n_trimmed = n_processed[trim_samples:-trim_samples]
+        z_trimmed = z_processed[trim_samples:-trim_samples]
+
+        n_windows = (len(e_trimmed) - window_size) // stride + 1
+        stream_window_counts.append(n_windows)
+
+        for i in range(n_windows):
+            start_idx = i * stride
+            end_idx = start_idx + window_size
+
+            e_window = e_trimmed[start_idx:end_idx]
+            n_window = n_trimmed[start_idx:end_idx]
+            z_window = z_trimmed[start_idx:end_idx]
+
+            waveform = np.stack([e_window, n_window, z_window], axis=-1)
+            all_waveforms.append(waveform)
+
+    # Batch inference on all waveforms
+    all_waveforms = np.array(all_waveforms)
+    all_scores = classifier(all_waveforms)
+
+    # Split scores back to individual streams
+    results = []
+    idx = 0
+    for n_windows in stream_window_counts:
+        scores = all_scores[idx:idx + n_windows]
+        idx += n_windows
+
+        results.append({
+            'scores_array': scores,
+            'mean_score': np.mean(scores),
+            'max_score': np.max(scores)
+        })
+
+    return results
