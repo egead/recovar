@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 reproducibility/phasenet_eqt/filtered_phasenet_*
+demo/filtered_phasenet*
 reproducibility/continous_results
 reproducibility/bootstrap_results
 reproducibility/phasenet_eqt/phasenet_picks
@@ -8,6 +9,7 @@ reproducibility/phasenet_eqt/*.txt
 reproducibility/dataset_exploration.ipynb
 reproducibility/phasenet_eqt/*.npz
 reproducibility/phasenet_eqt/phasenet_picks_noslide
+demo/preprocessed_demo_data
 __pycache__/
 *.py[cod]
 *$py.class

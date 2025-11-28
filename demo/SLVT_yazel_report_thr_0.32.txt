@@ -1,0 +1,94 @@
+======================================================================
+YAZEL BATCH SLIDING WINDOW ANALYSIS REPORT
+======================================================================
+
+LEGEND:
+----------------------------------------------------------------------
+CATALOG STATISTICS:
+  - Shows PhaseNet's performance against ground truth catalog
+  - PhaseNet detected: Catalog events that PhaseNet found
+  - PhaseNet missed: Catalog events that PhaseNet completely missed
+  - These events cannot be recovered by RECOVAR filtering
+
+RECOVAR FILTER PERFORMANCE (TP/FP/FN/TN):
+  - Evaluates RECOVAR's ability to filter PhaseNet picks
+  - TP (True Positive): PhaseNet pick with catalog event, RECOVAR kept it
+  - FP (False Positive): PhaseNet pick without catalog event, RECOVAR kept it
+  - FN (False Negative): PhaseNet pick with catalog event, RECOVAR rejected it
+  - TN (True Negative): PhaseNet pick without catalog event, RECOVAR rejected it
+
+======================================================================
+
+PhaseNet Threshold: 0.32
+Sliding window: 60 seconds with 1 sec iterations
+
+----------------------------------------------------------------------
+CATALOG STATISTICS (PhaseNet Baseline Performance)
+----------------------------------------------------------------------
+    Total catalog P-picks for analyzed stations: 534
+    PhaseNet detected (True Positives): 455 (85.2%)
+    PhaseNet missed (False Negatives): 79 (14.8%)
+
+----------------------------------------------------------------------
+DETECTION STATISTICS
+----------------------------------------------------------------------
+    Total windows: 2175
+    Both (catalog + PhaseNet): 490
+    PhaseNet only: 1685
+    Catalog only: 0
+
+======================================================================
+SLIDING WINDOW MEAN SCORES
+======================================================================
+    Best threshold: 0.132
+    Filter out 86.9% of FPs, lose 16.7% of TPs
+    TP=408, FP=221, FN=82, TN=1464
+    Precision=0.649, Recall=0.833, F1=0.729 (best F1 score)
+
+    Manual thresholds:
+    Threshold 0.05: Filter out 56.5% of FPs, lose   1.4% of TPs  (F1=0.566)
+    Threshold 0.06: Filter out 63.5% of FPs, lose   2.2% of TPs  (F1=0.605)
+    Threshold 0.07: Filter out 68.4% of FPs, lose   2.9% of TPs  (F1=0.636)
+    Threshold 0.08: Filter out 72.0% of FPs, lose   4.3% of TPs  (F1=0.656)
+    Threshold 0.09: Filter out 76.3% of FPs, lose   6.5% of TPs  (F1=0.680)
+    Threshold 0.10: Filter out 79.6% of FPs, lose   9.0% of TPs  (F1=0.697)
+    Threshold 0.11: Filter out 82.8% of FPs, lose  11.0% of TPs  (F1=0.717)
+    Threshold 0.12: Filter out 84.2% of FPs, lose  12.9% of TPs  (F1=0.722)
+    Threshold 0.13: Filter out 86.5% of FPs, lose  16.1% of TPs  (F1=0.728)
+    Threshold 0.14: Filter out 87.9% of FPs, lose  20.2% of TPs  (F1=0.721)
+    Threshold 0.15: Filter out 89.3% of FPs, lose  23.3% of TPs  (F1=0.719)
+    Threshold 0.16: Filter out 91.0% of FPs, lose  27.3% of TPs  (F1=0.713)
+    Threshold 0.17: Filter out 92.4% of FPs, lose  30.4% of TPs  (F1=0.711)
+    Threshold 0.18: Filter out 93.6% of FPs, lose  33.1% of TPs  (F1=0.708)
+    Threshold 0.19: Filter out 94.2% of FPs, lose  36.7% of TPs  (F1=0.690)
+    Threshold 0.20: Filter out 94.7% of FPs, lose  41.2% of TPs  (F1=0.664)
+
+======================================================================
+SLIDING WINDOW MAX SCORES
+======================================================================
+    Best threshold: 0.244
+    Filter out 88.7% of FPs, lose 20.0% of TPs
+    TP=392, FP=191, FN=98, TN=1494
+    Precision=0.672, Recall=0.800, F1=0.731 (best F1 score)
+
+    Manual thresholds:
+    Threshold 0.05: Filter out 35.0% of FPs, lose   0.4% of TPs  (F1=0.471)
+    Threshold 0.06: Filter out 42.4% of FPs, lose   0.4% of TPs  (F1=0.501)
+    Threshold 0.07: Filter out 47.8% of FPs, lose   0.4% of TPs  (F1=0.526)
+    Threshold 0.08: Filter out 52.5% of FPs, lose   1.0% of TPs  (F1=0.546)
+    Threshold 0.09: Filter out 56.6% of FPs, lose   1.4% of TPs  (F1=0.567)
+    Threshold 0.10: Filter out 60.7% of FPs, lose   2.0% of TPs  (F1=0.588)
+    Threshold 0.11: Filter out 63.9% of FPs, lose   2.7% of TPs  (F1=0.606)
+    Threshold 0.12: Filter out 66.4% of FPs, lose   2.9% of TPs  (F1=0.621)
+    Threshold 0.13: Filter out 69.1% of FPs, lose   3.3% of TPs  (F1=0.638)
+    Threshold 0.14: Filter out 71.8% of FPs, lose   4.1% of TPs  (F1=0.655)
+    Threshold 0.15: Filter out 73.8% of FPs, lose   5.5% of TPs  (F1=0.664)
+    Threshold 0.16: Filter out 76.2% of FPs, lose   6.5% of TPs  (F1=0.679)
+    Threshold 0.17: Filter out 77.7% of FPs, lose   8.0% of TPs  (F1=0.685)
+    Threshold 0.18: Filter out 79.0% of FPs, lose   9.6% of TPs  (F1=0.688)
+    Threshold 0.19: Filter out 80.5% of FPs, lose  11.6% of TPs  (F1=0.692)
+    Threshold 0.20: Filter out 82.0% of FPs, lose  12.0% of TPs  (F1=0.704)
+
+======================================================================
+END OF REPORT
+======================================================================

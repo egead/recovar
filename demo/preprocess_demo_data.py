@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Preprocessing script for YAZEL RECOVAR demo.
 
@@ -171,12 +170,11 @@ def preprocess_and_save(phasenet_pick_dir, catalog_path, model_path, output_dir,
 
 
 if __name__ == '__main__':
-    # Configuration
     MODEL_PATH = '/mnt/data_a/ege/recovar_models/exp_instance/representation_learning_autoencoder_ensemble/instance/split0/ep19.h5'
     PHASENET_THRESHOLD = 0.32
     PHASENET_PICK_DIR = f"filtered_phasenet_picks_dir_thr_{PHASENET_THRESHOLD:.2f}"
     CATALOG_PATH = '/home/boxx/Public/earthquake_model_evaluations/data/SilivriPaper_2019-09-01__2019-11-30/processed_catalogs/kara74a_phase_picks.csv'
     OUTPUT_DIR = 'preprocessed_demo_data'
-    MAX_SAMPLES = 200  # Limit for demo - set to None to process all
+    MAX_SAMPLES = None  # Limit for demo - set to None to process all
 
     preprocess_and_save(PHASENET_PICK_DIR, CATALOG_PATH, MODEL_PATH, OUTPUT_DIR, max_samples=MAX_SAMPLES)

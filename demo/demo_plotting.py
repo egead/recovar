@@ -7,32 +7,8 @@ import matplotlib.pyplot as plt
 
 
 def get_phasenet_probabilities(stream):
-    """
-    Extract PhaseNet P-wave probabilities from a stream.
-
-    Parameters
-    ----------
-    stream : obspy.Stream
-        Stream containing waveform traces and PhaseNet probability traces
-
-    Returns
-    -------
-    dict
-        Dictionary containing:
-        - p_prob: P-wave probability array (inverted from saved trace)
-        - times: Time array in seconds
-        - sampling_rate: Sampling rate in Hz
-    """
-    # Get P-wave probability trace
     p_trace = stream.select(channel='Pha')[0]
-
-    # Get waveform traces to determine original starttime
-    waveform_traces = [tr for tr in stream if tr.stats.channel.startswith('HH')]
-    original_starttime = waveform_traces[0].stats.starttime
-
-    # Calculate time array relative to the original stream starttime
     sampling_rate = p_trace.stats.sampling_rate
-    offset_seconds = (p_trace.stats.starttime - original_starttime)
     times = np.arange(len(p_trace.data)) / sampling_rate
 
     return {
@@ -46,19 +22,6 @@ def plot_side_by_side_comparison(example1, result1, phasenet1, example2, result2
                                   threshold=0.07, score_type='max'):
     """
     Plot two examples side by side for comparison.
-
-    Parameters
-    ----------
-    example1, example2 : dict
-        Example dictionaries containing stream, station, picks, and timing information
-    result1, result2 : dict
-        RECOVAR results containing scores_array, mean_score, max_score
-    phasenet1, phasenet2 : dict
-        PhaseNet probability results from get_phasenet_probabilities()
-    threshold : float, optional
-        RECOVAR threshold for filtering (default: 0.07)
-    score_type : str, optional
-        Score type to use for filtering decision: 'max' or 'mean' (default: 'max')
     """
     fig, axes = plt.subplots(5, 2, figsize=(18, 12), sharex='col')
 
@@ -164,19 +127,6 @@ def plot_side_by_side_comparison(example1, result1, phasenet1, example2, result2
 def plot_example(example, recovar_result, phasenet_result, threshold=0.07, score_type='max'):
     """
     Plot a single example showing waveforms, PhaseNet probabilities, and RECOVAR scores.
-
-    Parameters
-    ----------
-    example : dict
-        Example dictionary containing stream, station, picks, and timing information
-    recovar_result : dict
-        RECOVAR results containing scores_array, mean_score, max_score
-    phasenet_result : dict
-        PhaseNet probability results from get_phasenet_probabilities()
-    threshold : float, optional
-        RECOVAR threshold for filtering (default: 0.07)
-    score_type : str, optional
-        Score type to use for filtering decision: 'max' or 'mean' (default: 'max')
     """
     fig, axes = plt.subplots(5, 1, figsize=(12, 10))
 
@@ -281,25 +231,6 @@ def plot_example(example, recovar_result, phasenet_result, threshold=0.07, score
 
 
 def plot_threshold_tradeoff(tp_max_scores, fp_max_scores, recommended_threshold=0.07):
-    """
-    Plot the trade-off between missed true positives and filtered false positives
-    across different threshold values.
-
-    Parameters
-    ----------
-    tp_max_scores : list
-        List of max RECOVAR scores for true positive examples
-    fp_max_scores : list
-        List of max RECOVAR scores for false positive examples
-    recommended_threshold : float, optional
-        The recommended threshold to highlight (default: 0.07)
-
-    Returns
-    -------
-    tuple
-        (missed_tps_at_threshold, filtered_fps_at_threshold) - Counts at recommended threshold
-    """
-    # Threshold sweep analysis
     thresholds = np.linspace(0, 0.3, 100)
 
     missed_tps = []  # True positives that would be missed (filtered)
@@ -314,13 +245,12 @@ def plot_threshold_tradeoff(tp_max_scores, fp_max_scores, recommended_threshold=
         filtered = sum(1 for score in fp_max_scores if score < thresh)
         filtered_fps.append(filtered)
 
-    # Create the plot
     fig, ax1 = plt.subplots(figsize=(10, 6))
 
     # Plot missed TPs
     color1 = 'tab:red'
     ax1.set_xlabel('RECOVAR Threshold', fontsize=12)
-    ax1.set_ylabel('Missed True Positives (False Negatives)', color=color1, fontsize=12)
+    ax1.set_ylabel('Missed Catalog (True) Picks', color=color1, fontsize=12)
     line1 = ax1.plot(thresholds, missed_tps, color=color1, linewidth=2, label='Missed TPs')
     ax1.tick_params(axis='y', labelcolor=color1)
     ax1.grid(True, alpha=0.3)
@@ -328,7 +258,7 @@ def plot_threshold_tradeoff(tp_max_scores, fp_max_scores, recommended_threshold=
     # Create second y-axis for filtered FPs
     ax2 = ax1.twinx()
     color2 = 'tab:green'
-    ax2.set_ylabel('Filtered False Positives (True Negatives)', color=color2, fontsize=12)
+    ax2.set_ylabel('Filtered False Picks', color=color2, fontsize=12)
     line2 = ax2.plot(thresholds, filtered_fps, color=color2, linewidth=2, label='Filtered FPs')
     ax2.tick_params(axis='y', labelcolor=color2)
 

@@ -1,7 +1,3 @@
-"""
-Utility functions for YAZEL RECOVAR demo notebook.
-"""
-
 import obspy
 import pandas as pd
 from pathlib import Path
@@ -55,7 +51,6 @@ def load_example_picks(phasenet_pick_dir, catalog, max_files=None, min_tp=3, min
             window_start = waveform_traces[0].stats.starttime.datetime
             window_end = waveform_traces[0].stats.endtime.datetime
 
-            # Get PhaseNet pick time from metadata
             phasenet_pick = pd.to_datetime(pick_row['pick_time'].values[0], format='mixed')
 
             # Check if there's a catalog pick in this window
@@ -66,7 +61,7 @@ def load_example_picks(phasenet_pick_dir, catalog, max_files=None, min_tp=3, min
 
             example = {
                 'file': file,
-                'stream': stream,  # Keep full stream (waveforms + annotations)
+                'stream': stream, 
                 'station': station,
                 'phasenet_pick': phasenet_pick,
                 'window_start': window_start,
@@ -117,11 +112,9 @@ def load_preprocessed_data(preprocessed_dir, precompute_phasenet=True):
     truepicks_dir = preprocessed_path / 'truepicks'
     falsepicks_dir = preprocessed_path / 'falsepicks'
 
-    # Load metadata
     tp_metadata = pd.read_csv(preprocessed_path / 'truepicks_metadata.csv')
     fp_metadata = pd.read_csv(preprocessed_path / 'falsepicks_metadata.csv')
 
-    # Load scores arrays
     with open(preprocessed_path / 'truepicks_scores.json', 'r') as f:
         tp_scores_data = json.load(f)
     with open(preprocessed_path / 'falsepicks_scores.json', 'r') as f:
@@ -211,29 +204,13 @@ def load_preprocessed_data(preprocessed_dir, precompute_phasenet=True):
 
 
 def print_confusion_matrix(tp_kept, tp_filtered, fp_kept, fp_filtered, threshold):
-    """
-    Print a simple confusion matrix showing classification performance.
-
-    Parameters
-    ----------
-    tp_kept : list
-        List of true positive examples that were kept
-    tp_filtered : list
-        List of true positive examples that were filtered
-    fp_kept : list
-        List of false positive examples that were kept
-    fp_filtered : list
-        List of false positive examples that were filtered
-    threshold : float
-        The threshold value used for classification
-    """
-    TP = len(tp_kept)      # True Positives: real earthquakes correctly kept
-    FN = len(tp_filtered)  # False Negatives: real earthquakes incorrectly filtered
-    TN = len(fp_filtered)  # True Negatives: noise correctly filtered
-    FP = len(fp_kept)      # False Positives: noise incorrectly kept
+    TP = len(tp_kept)     
+    FN = len(tp_filtered)  
+    TN = len(fp_filtered) 
+    FP = len(fp_kept)      
 
     print(f"Performance at threshold = {threshold}:")
-    print(f"  True Positives (TP):   {TP:3d}  (real earthquakes kept)")
-    print(f"  False Negatives (FN):  {FN:3d}  (real earthquakes missed)")
-    print(f"  True Negatives (TN):   {TN:3d}  (noise filtered)")
-    print(f"  False Positives (FP):  {FP:3d}  (noise kept)")
+    print(f"  Catalog Events RECOVAR kept (TP):   {TP:3d} ")
+    print(f"  Catalog Events Recovar lost (FN):  {FN:3d} ")
+    print(f"  False Phasenet Pick Recovar FILTERED (TN):   {TN:3d}")
+    print(f"  False Phasenet Pick Recovar KEPT (FP):  {FP:3d} ")
