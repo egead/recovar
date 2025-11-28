@@ -89,6 +89,79 @@ def load_example_picks(phasenet_pick_dir, catalog, max_files=None, min_tp=3, min
     return tp_examples, fp_examples
 
 
+def load_preprocessed_data(preprocessed_dir):
+    """
+    Load preprocessed demo data from truepicks/falsepicks directories.
+
+    Parameters
+    ----------
+    preprocessed_dir : str
+        Directory containing preprocessed truepicks/ and falsepicks/ subdirectories
+
+    Returns
+    -------
+    tuple
+        (tp_examples, fp_examples, tp_metadata, fp_metadata)
+        - tp_examples: list of dicts with stream, file, station, picks, etc.
+        - fp_examples: list of dicts with stream, file, station, picks, etc.
+        - tp_metadata: DataFrame with RECOVAR scores for true picks
+        - fp_metadata: DataFrame with RECOVAR scores for false picks
+    """
+    preprocessed_path = Path(preprocessed_dir)
+    truepicks_dir = preprocessed_path / 'truepicks'
+    falsepicks_dir = preprocessed_path / 'falsepicks'
+
+    # Load metadata
+    tp_metadata = pd.read_csv(preprocessed_path / 'truepicks_metadata.csv')
+    fp_metadata = pd.read_csv(preprocessed_path / 'falsepicks_metadata.csv')
+
+    # Convert datetime columns
+    tp_metadata['phasenet_pick'] = pd.to_datetime(tp_metadata['phasenet_pick'])
+    tp_metadata['catalog_pick'] = pd.to_datetime(tp_metadata['catalog_pick'])
+    tp_metadata['window_start'] = pd.to_datetime(tp_metadata['window_start'])
+    tp_metadata['window_end'] = pd.to_datetime(tp_metadata['window_end'])
+
+    fp_metadata['phasenet_pick'] = pd.to_datetime(fp_metadata['phasenet_pick'])
+    fp_metadata['window_start'] = pd.to_datetime(fp_metadata['window_start'])
+    fp_metadata['window_end'] = pd.to_datetime(fp_metadata['window_end'])
+
+    # Load true picks
+    tp_examples = []
+    for _, row in tp_metadata.iterrows():
+        file_path = truepicks_dir / row['filename']
+        stream = obspy.read(str(file_path))
+        stream.merge()
+
+        tp_examples.append({
+            'file': file_path,
+            'stream': stream,
+            'station': row['station'],
+            'phasenet_pick': row['phasenet_pick'],
+            'catalog_pick': row['catalog_pick'],
+            'window_start': row['window_start'],
+            'window_end': row['window_end']
+        })
+
+    # Load false picks
+    fp_examples = []
+    for _, row in fp_metadata.iterrows():
+        file_path = falsepicks_dir / row['filename']
+        stream = obspy.read(str(file_path))
+        stream.merge()
+
+        fp_examples.append({
+            'file': file_path,
+            'stream': stream,
+            'station': row['station'],
+            'phasenet_pick': row['phasenet_pick'],
+            'catalog_pick': None,
+            'window_start': row['window_start'],
+            'window_end': row['window_end']
+        })
+
+    return tp_examples, fp_examples, tp_metadata, fp_metadata
+
+
 def print_confusion_matrix(tp_kept, tp_filtered, fp_kept, fp_filtered, threshold):
     """
     Print a simple confusion matrix showing classification performance.
