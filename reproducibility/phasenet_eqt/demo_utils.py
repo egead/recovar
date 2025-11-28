@@ -7,7 +7,7 @@ import pandas as pd
 from pathlib import Path
 
 
-def load_example_picks(phasenet_pick_dir, catalog, max_files=50, min_tp=3, min_fp=3):
+def load_example_picks(phasenet_pick_dir, catalog, max_files=None, min_tp=3, min_fp=3):
     """
     Load and categorize PhaseNet picks into TRUE and FALSE examples.
 
@@ -17,8 +17,8 @@ def load_example_picks(phasenet_pick_dir, catalog, max_files=50, min_tp=3, min_f
         Directory containing PhaseNet pick files
     catalog : pd.DataFrame
         Catalog DataFrame with p_arrival_time column
-    max_files : int, optional
-        Maximum number of files to check (default: 50)
+    max_files : int or None, optional
+        Maximum number of files to check. If None, process all files (default: None)
     min_tp : int, optional
         Minimum number of TRUE PICK examples to find (default: 3)
     min_fp : int, optional
@@ -35,7 +35,10 @@ def load_example_picks(phasenet_pick_dir, catalog, max_files=50, min_tp=3, min_f
     tp_examples = []  # TRUE PICK examples (matches catalog)
     fp_examples = []  # FALSE PICK examples (no catalog match)
 
-    for file in files[:max_files]:
+    # Process all files if max_files is None, otherwise limit
+    files_to_process = files if max_files is None else files[:max_files]
+
+    for file in files_to_process:
         pick_row = phasenet_picks[phasenet_picks['filename'] == file.name]
         if pick_row.empty:
             continue
@@ -79,8 +82,37 @@ def load_example_picks(phasenet_pick_dir, catalog, max_files=50, min_tp=3, min_f
         except Exception as e:
             continue
 
-        # Stop when we have enough examples
-        if len(tp_examples) >= min_tp and len(fp_examples) >= min_fp:
+        # Stop when we have enough examples (only if max_files is not None)
+        if max_files is not None and len(tp_examples) >= min_tp and len(fp_examples) >= min_fp:
             break
 
     return tp_examples, fp_examples
+
+
+def print_confusion_matrix(tp_kept, tp_filtered, fp_kept, fp_filtered, threshold):
+    """
+    Print a simple confusion matrix showing classification performance.
+
+    Parameters
+    ----------
+    tp_kept : list
+        List of true positive examples that were kept
+    tp_filtered : list
+        List of true positive examples that were filtered
+    fp_kept : list
+        List of false positive examples that were kept
+    fp_filtered : list
+        List of false positive examples that were filtered
+    threshold : float
+        The threshold value used for classification
+    """
+    TP = len(tp_kept)      # True Positives: real earthquakes correctly kept
+    FN = len(tp_filtered)  # False Negatives: real earthquakes incorrectly filtered
+    TN = len(fp_filtered)  # True Negatives: noise correctly filtered
+    FP = len(fp_kept)      # False Positives: noise incorrectly kept
+
+    print(f"Performance at threshold = {threshold}:")
+    print(f"  True Positives (TP):   {TP:3d}  (real earthquakes kept)")
+    print(f"  False Negatives (FN):  {FN:3d}  (real earthquakes missed)")
+    print(f"  True Negatives (TN):   {TN:3d}  (noise filtered)")
+    print(f"  False Positives (FP):  {FP:3d}  (noise kept)")

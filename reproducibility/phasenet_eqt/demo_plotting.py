@@ -278,3 +278,78 @@ def plot_example(example, recovar_result, phasenet_result, threshold=0.07, score
 
     plt.tight_layout()
     plt.show()
+
+
+def plot_threshold_tradeoff(tp_max_scores, fp_max_scores, recommended_threshold=0.07):
+    """
+    Plot the trade-off between missed true positives and filtered false positives
+    across different threshold values.
+
+    Parameters
+    ----------
+    tp_max_scores : list
+        List of max RECOVAR scores for true positive examples
+    fp_max_scores : list
+        List of max RECOVAR scores for false positive examples
+    recommended_threshold : float, optional
+        The recommended threshold to highlight (default: 0.07)
+
+    Returns
+    -------
+    tuple
+        (missed_tps_at_threshold, filtered_fps_at_threshold) - Counts at recommended threshold
+    """
+    # Threshold sweep analysis
+    thresholds = np.linspace(0, 0.3, 100)
+
+    missed_tps = []  # True positives that would be missed (filtered)
+    filtered_fps = []  # False positives that would be filtered
+
+    for thresh in thresholds:
+        # Count TPs with score < threshold (these would be missed)
+        missed = sum(1 for score in tp_max_scores if score < thresh)
+        missed_tps.append(missed)
+
+        # Count FPs with score < threshold (these would be filtered correctly)
+        filtered = sum(1 for score in fp_max_scores if score < thresh)
+        filtered_fps.append(filtered)
+
+    # Create the plot
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+
+    # Plot missed TPs
+    color1 = 'tab:red'
+    ax1.set_xlabel('RECOVAR Threshold', fontsize=12)
+    ax1.set_ylabel('Missed True Positives (False Negatives)', color=color1, fontsize=12)
+    line1 = ax1.plot(thresholds, missed_tps, color=color1, linewidth=2, label='Missed TPs')
+    ax1.tick_params(axis='y', labelcolor=color1)
+    ax1.grid(True, alpha=0.3)
+
+    # Create second y-axis for filtered FPs
+    ax2 = ax1.twinx()
+    color2 = 'tab:green'
+    ax2.set_ylabel('Filtered False Positives (True Negatives)', color=color2, fontsize=12)
+    line2 = ax2.plot(thresholds, filtered_fps, color=color2, linewidth=2, label='Filtered FPs')
+    ax2.tick_params(axis='y', labelcolor=color2)
+
+    # Add vertical line at recommended threshold
+    ax1.axvline(x=recommended_threshold, color='black', linestyle='--', linewidth=1.5,
+                label=f'Recommended threshold ({recommended_threshold})', alpha=0.8)
+
+    # Combine legends
+    lines = line1 + line2
+    labels = [l.get_label() for l in lines] + [f'Recommended threshold ({recommended_threshold})']
+    ax1.legend(lines + [ax1.axvline(x=recommended_threshold, color='black', linestyle='--')],
+               labels, loc='center left', fontsize=10)
+
+    plt.title('Threshold Trade-off: Missed TPs vs Filtered FPs', fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    plt.show()
+
+    # Print stats at recommended threshold
+    idx = np.argmin(np.abs(thresholds - recommended_threshold))
+    print(f"\nAt recommended threshold {recommended_threshold}:")
+    print(f"  Missed TPs: {missed_tps[idx]}/{len(tp_max_scores)}")
+    print(f"  Filtered FPs: {filtered_fps[idx]}/{len(fp_max_scores)}")
+
+    return missed_tps[idx], filtered_fps[idx]
