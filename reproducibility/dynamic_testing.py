@@ -1,11 +1,11 @@
 from recovar import RepresentationLearningMultipleAutoencoder
 from recovar import ClassifierMultipleAutoencoder
-from kfold_tester import KFoldTester
 from evaluator import Evaluator, CropOffsetFilter, LastEarthquakeFilter
 from sklearn.metrics import auc
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import os
 
 REPRESENTATION_LEARNING_MODEL_CLASS = RepresentationLearningMultipleAutoencoder
 CLASSIFIER_MODEL_CLASS = ClassifierMultipleAutoencoder
@@ -17,29 +17,30 @@ def _eval_cross_testing(train_dataset, test_dataset, df_path):
     rows = []
     filters = [CropOffsetFilter()]
 
-    evaluator = Evaluator(exp_name = f"MERGED_dynamic",
-                          representation_learning_model_class=REPRESENTATION_LEARNING_MODEL_CLASS,
-                          classifier_model_class = CLASSIFIER_MODEL_CLASS,
-                          train_dataset = train_dataset,
-                          test_dataset = test_dataset,
-                          filters = filters,
-                          split = SPLIT,
-                          report_best_val_score_epoch=True,
-                          method_params={})
+    evaluator = Evaluator(exp_name = f"SLVT_DYNAMIC_3",
+                            representation_learning_model_class=REPRESENTATION_LEARNING_MODEL_CLASS,
+                            classifier_model_class = CLASSIFIER_MODEL_CLASS,
+                            train_dataset = train_dataset,
+                            test_dataset = test_dataset,
+                            filters = filters,
+                            split = SPLIT,
+                            apply_resampling=False,
+                            report_best_val_score_epoch=True,
+                            method_params={})
 
     roc_vectors = evaluator.get_roc_vectors()
     roc_auc = auc(roc_vectors[0]["fpr"], roc_vectors[0]["tpr"])
 
     rows.append({"train_dataset": train_dataset,
-                 "test_dataset": test_dataset,
-                 "roc_auc": roc_auc})
+                    "test_dataset": test_dataset,
+                    "roc_auc": roc_auc})
 
     scores_df = pd.DataFrame(rows)
-    scores_df.to_csv(df_path)
-    
-def _plot_roc(train_dataset, test_dataset):
+    scores_df.to_csv(df_path, mode='a', header=not os.path.exists(df_path), index=False)
+
+def _plot_roc(train_dataset, test_dataset, resample_eq_ratio):
     filters = [CropOffsetFilter()]
-    evaluator = Evaluator(exp_name = f"MERGED_dynamic",
+    evaluator = Evaluator(exp_name = f"exp_{train_dataset}",
                             representation_learning_model_class=REPRESENTATION_LEARNING_MODEL_CLASS,
                             classifier_model_class = CLASSIFIER_MODEL_CLASS,
                             train_dataset = train_dataset,
@@ -68,7 +69,26 @@ def _plot_roc(train_dataset, test_dataset):
     plt.title(f'Train:{train_dataset} Test:{test_dataset} ROC Curve')
     plt.legend()
     plt.grid(True)
-    plt.savefig(f"{train_dataset}_on_{test_dataset}_dynamic_tpr-fpr.png")
+    plt.savefig(f"{train_dataset}_on_{test_dataset}_{resample_eq_ratio}_tpr-fpr.png")
 
-_eval_cross_testing("MERGED_fixed", "ERIK_fixed", "/home/ege/recovar/MERGED_test_ERIK_dilation_v2.csv")
-#_plot_roc("SLVT_fixed","SLVT_fixed")
+DATASETS = [
+    "BGKT_fixed",
+    "ERIK_fixed",
+    "SLVT_fixed",
+    "CTKS_fixed",
+    "GELI_fixed",
+    "GONE_fixed",
+    "ISK_fixed",
+    "IZI_fixed",
+    "KCTX_fixed",
+    "KLYT_fixed",
+    "MDNY_fixed",
+    "MRMT_fixed",
+    "ORLT_fixed",
+    "OSMT_fixed",
+    "TKR_fixed",
+    "UKOP_fixed",
+    "YLV_fixed",
+]
+for dataset in DATASETS:
+    _eval_cross_testing("SLVT_fixed", dataset, "/home/ege/recovar/SLVT_DYNAMIC_3_test_all.csv")

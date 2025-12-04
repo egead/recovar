@@ -1,13 +1,11 @@
-from recovar import (RepresentationLearningSingleAutoencoder, 
-                     RepresentationLearningDenoisingSingleAutoencoder, 
-                     RepresentationLearningMultipleAutoencoder)
-from recovar import ClassifierAutocovariance, ClassifierAugmentedAutoencoder, ClassifierMultipleAutoencoder
-from kfold_tester import KFoldTester
+from recovar import RepresentationLearningMultipleAutoencoder
+from recovar import ClassifierMultipleAutoencoder
 from evaluator import Evaluator, CropOffsetFilter, LastEarthquakeFilter
 from sklearn.metrics import auc
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import os
 
 REPRESENTATION_LEARNING_MODEL_CLASS = RepresentationLearningMultipleAutoencoder
 CLASSIFIER_MODEL_CLASS = ClassifierMultipleAutoencoder
@@ -39,7 +37,7 @@ def _eval_cross_testing(train_dataset, test_dataset, df_path):
                     "roc_auc": roc_auc})
 
     scores_df = pd.DataFrame(rows)
-    scores_df.to_csv(df_path)
+    scores_df.to_csv(df_path, mode='a', header=not os.path.exists(df_path), index=False)
 
 def _eval_cross_testing_resample(train_dataset, test_dataset, df_path):
     rows = []
@@ -68,7 +66,7 @@ def _eval_cross_testing_resample(train_dataset, test_dataset, df_path):
                      "roc_auc": roc_auc})
 
     scores_df = pd.DataFrame(rows)
-    scores_df.to_csv(df_path)
+    scores_df.to_csv(df_path, mode='a', header=not os.path.exists(df_path), index=False)
     
 def _plot_roc(train_dataset, test_dataset, resample_eq_ratio):
     filters = [CropOffsetFilter()]
@@ -108,4 +106,24 @@ def _plot_roc(train_dataset, test_dataset, resample_eq_ratio):
     plt.grid(True)
     plt.savefig(f"{train_dataset}_on_{test_dataset}_{resample_eq_ratio}_tpr-fpr.png")
 
-_eval_cross_testing("MERGED_fixed", "MERGED_fixed", "/home/ege/recovar/MERGED_test_MERGED_1.csv")
+DATASETS = [
+    "BGKT_fixed",
+    "ERIK_fixed",
+    "SLVT_fixed",
+    "CTKS_fixed",
+    "GELI_fixed",
+    "GONE_fixed",
+    "ISK_fixed",
+    "IZI_fixed",
+    "KCTX_fixed",
+    "KLYT_fixed",
+    "MDNY_fixed",
+    "MRMT_fixed",
+    "ORLT_fixed",
+    "OSMT_fixed",
+    "TKR_fixed",
+    "UKOP_fixed",
+    "YLV_fixed",
+]
+for dataset in DATASETS:
+    _eval_cross_testing("instance", dataset, "/home/ege/recovar/instance_test_all.csv")
