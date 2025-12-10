@@ -18,7 +18,7 @@ def _eval_cross_testing(train_dataset, test_dataset, df_path):
     rows = []
     filters = [CropOffsetFilter()]
 
-    evaluator = Evaluator(exp_name = f"SLVT_DYNAMIC_3",
+    evaluator = Evaluator(exp_name = f"SILIVRI2019_DYNAMIC_3",
                             representation_learning_model_class=REPRESENTATION_LEARNING_MODEL_CLASS,
                             classifier_model_class = CLASSIFIER_MODEL_CLASS,
                             train_dataset = train_dataset,
@@ -71,7 +71,7 @@ def _plot_roc(train_dataset, test_dataset, resample_eq_ratio):
     plt.legend()
     plt.grid(True)
     plt.savefig(f"{train_dataset}_on_{test_dataset}_{resample_eq_ratio}_tpr-fpr.png")
-
+'''
 DATASETS = [
     "BGKT_fixed",
     "ERIK_fixed",
@@ -91,5 +91,7 @@ DATASETS = [
     "UKOP_fixed",
     "YLV_fixed",
 ]
+'''
+DATASETS=['SILIVRI2019']
 for dataset in DATASETS:
-    _eval_cross_testing("SLVT_fixed", dataset, "/home/ege/recovar/SLVT_DYNAMIC_3_test_all.csv")
+    _eval_cross_testing("SILIVRI2019", dataset, "/home/ege/recovar/SILIVRI2019_DYNAMIC_3_self.csv")

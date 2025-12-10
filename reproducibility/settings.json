@@ -6,9 +6,9 @@
         "DATASET_CHUNKS": 5,
         "PHASE_PICK_ENSURED_CROP_RATIO": 1.0,
         "PHASE_ENSURING_MARGIN": 6.0,
-        "APPLY_RESAMPLING": true,
+        "APPLY_RESAMPLING": false,
         "RESAMPLE_EQ_RATIO": 0.1,
-        "SINGLE_SPLIT_TEST_RATIO": 1
+        "SINGLE_SPLIT_TEST_RATIO": 0.2
     },
     "DATASET_DIRECTORIES": {
         "STEAD_WAVEFORMS_HDF5_PATH": "/home/boxx/Public/earthquake_model_evaluations/data/Stead/full/waveforms/test.hdf5",
