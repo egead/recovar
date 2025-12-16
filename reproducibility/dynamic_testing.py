@@ -1,6 +1,5 @@
 from recovar import RepresentationLearningMultipleAutoencoder
 from recovar import ClassifierMultipleAutoencoder
-from kfold_tester import KFoldTester
 from evaluator import Evaluator, CropOffsetFilter
 from sklearn.metrics import auc
 import pandas as pd
@@ -18,15 +17,16 @@ def _eval_cross_testing(train_dataset, test_dataset, df_path):
     rows = []
     filters = [CropOffsetFilter()]
 
-    evaluator = Evaluator(exp_name = f"SILIVRI2019_DYNAMIC_3",
+    evaluator = Evaluator(exp_name = f"SILIVRI2019_DYNAMIC_3_002",
                             representation_learning_model_class=REPRESENTATION_LEARNING_MODEL_CLASS,
                             classifier_model_class = CLASSIFIER_MODEL_CLASS,
                             train_dataset = train_dataset,
                             test_dataset = test_dataset,
                             filters = filters,
                             split = SPLIT,
+                            epochs=[99],
                             apply_resampling=False,
-                            report_best_val_score_epoch=True,
+                            report_best_val_score_epoch=False,
                             method_params={})
 
     roc_vectors = evaluator.get_roc_vectors()
@@ -71,8 +71,9 @@ def _plot_roc(train_dataset, test_dataset, resample_eq_ratio):
     plt.legend()
     plt.grid(True)
     plt.savefig(f"{train_dataset}_on_{test_dataset}_{resample_eq_ratio}_tpr-fpr.png")
-'''
+
 DATASETS = [
+    "instance",
     "BGKT_fixed",
     "ERIK_fixed",
     "SLVT_fixed",
@@ -89,9 +90,8 @@ DATASETS = [
     "OSMT_fixed",
     "TKR_fixed",
     "UKOP_fixed",
-    "YLV_fixed",
+    "YLV_fixed"
 ]
-'''
-DATASETS=['SILIVRI2019']
+
 for dataset in DATASETS:
-    _eval_cross_testing("SILIVRI2019", dataset, "/home/ege/recovar/SILIVRI2019_DYNAMIC_3_self.csv")
+    _eval_cross_testing("SILIVRI2019", dataset, "/home/ege/recovar/SILIVRI2019_DYNAMIC_3_002_all_last.csv")
