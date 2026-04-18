@@ -94,8 +94,8 @@
 	"BALIKESIR2025":{
 	    "metadata":"/mnt/second_drive/recovar/reproducibility/output/BALIKESIR_continuous_metadata.csv",
 	    "waveforms":"/mnt/second_drive/recovar/reproducibility/output/BALIKESIR_continuous_waveforms.hdf5"
-    	}},
+    	},
     "PREPROCESSED_DATASET_DIRECTORY": "/mnt/data_a/ege/recovar_data_preprocessed",
     "TRAINED_MODELS_DIR": "/mnt/data_a/ege/recovar_models",
     "RESULTS_DIR": "/mnt/data_a/ege/recovar_results"
-}
+

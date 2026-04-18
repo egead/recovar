@@ -10,7 +10,6 @@ import os
 REPRESENTATION_LEARNING_MODEL_CLASS = RepresentationLearningMultipleAutoencoder
 CLASSIFIER_MODEL_CLASS = ClassifierMultipleAutoencoder
 
-# Split.
 SPLIT = 0
 rows = []
 
@@ -18,7 +17,7 @@ def _eval_cross_testing(train_dataset, test_dataset, df_path):
     rows = []
     filters = [CropOffsetFilter()]
 
-    evaluator = Evaluator(exp_name = f"exp_instance",
+    evaluator = Evaluator(exp_name = f"BALIKESIR_DYNAMIC_8",
                             representation_learning_model_class=REPRESENTATION_LEARNING_MODEL_CLASS,
                             classifier_model_class = CLASSIFIER_MODEL_CLASS,
                             train_dataset = train_dataset,
@@ -39,47 +38,15 @@ def _eval_cross_testing(train_dataset, test_dataset, df_path):
     scores_df = pd.DataFrame(rows)
     scores_df.to_csv(df_path, mode='a', header=not os.path.exists(df_path), index=False)
 
-def _eval_cross_testing_resample(train_dataset, test_dataset, df_path):
-    rows = []
-    for resample_eq_ratio in [0.01,0.02, 0.03, 0.04, 0.05]:
-        filters = [CropOffsetFilter()]
-
-        evaluator = Evaluator(exp_name = f"exp_{train_dataset}_resample_eq_ratio_{resample_eq_ratio}",
-                              representation_learning_model_class=REPRESENTATION_LEARNING_MODEL_CLASS,
-                              classifier_model_class = CLASSIFIER_MODEL_CLASS,
-                              train_dataset = train_dataset,
-                              test_dataset = test_dataset,
-                              filters = filters,
-                              split = SPLIT,
-                              apply_resampling=True,
-                              resample_eq_ratio=resample_eq_ratio,
-                              resample_while_keeping_total_waveforms_fixed=True,
-                              report_best_val_score_epoch=True,
-                              method_params={})
-
-        roc_vectors = evaluator.get_roc_vectors()
-        roc_auc = auc(roc_vectors[0]["fpr"], roc_vectors[0]["tpr"])
-
-        rows.append({"train_dataset": train_dataset,
-                     "test_dataset": test_dataset,
-                     "resample_eq_ratio": resample_eq_ratio,
-                     "roc_auc": roc_auc})
-
-    scores_df = pd.DataFrame(rows)
-    scores_df.to_csv(df_path, mode='a', header=not os.path.exists(df_path), index=False)
-    
 def _plot_roc(train_dataset, test_dataset): #, resample_eq_ratio):
     filters = [CropOffsetFilter()]
-    evaluator = Evaluator(exp_name = f"exp_instance",
+    evaluator = Evaluator(exp_name = f"BALIKESIR_DYNAMIC_8",
                             representation_learning_model_class=REPRESENTATION_LEARNING_MODEL_CLASS,
                             classifier_model_class = CLASSIFIER_MODEL_CLASS,
                             train_dataset = train_dataset,
                             test_dataset = test_dataset,
                             filters = filters,
                             split = SPLIT,
-                            apply_resampling=False,
-                            #resample_eq_ratio=resample_eq_ratio,
-                            #resample_while_keeping_total_waveforms_fixed=True,
                             report_best_val_score_epoch=True,
                             method_params={})
 
@@ -87,7 +54,6 @@ def _plot_roc(train_dataset, test_dataset): #, resample_eq_ratio):
     roc_auc = auc(roc_vectors[0]["fpr"], roc_vectors[0]["tpr"])
     print(roc_auc)
 
-    # Create a DataFrame for Seaborn
     roc_data = pd.DataFrame({
         'False Positive Rate': roc_vectors[0]["fpr"],
         'True Positive Rate': roc_vectors[0]["tpr"]
@@ -96,7 +62,6 @@ def _plot_roc(train_dataset, test_dataset): #, resample_eq_ratio):
     plt.figure(figsize=(8, 6))
     sns.lineplot(data=roc_data, x='False Positive Rate', y='True Positive Rate', label='ROC Curve')
 
-    # Plot random guess line
     plt.plot([0, 1], [0, 1], 'k--', label='Random Guess')
 
     plt.xlabel('False Positive Rate')
@@ -107,26 +72,28 @@ def _plot_roc(train_dataset, test_dataset): #, resample_eq_ratio):
     plt.savefig(f"{train_dataset}_on_{test_dataset}_tpr-fpr.png")
 
 DATASETS = [
-"instance", "SILIVRI2019", "BALIKESIR2025",
-    #"BGKT_fixed",
-   # "ERIK_fixed",
-  #  "SLVT_fixed",
- #   "CTKS_fixed",
+    "instance",
+"BALIKESIR2025",
+#    "BGKT_fixed",
+#    "ERIK_fixed",
+#    "SLVT_fixed",
+#    "CTKS_fixed",
 #    "GELI_fixed",
-   # "GONE_fixed",
-  #  "ISK_fixed",
- #   "IZI_fixed",
+#    "GONE_fixed",
+#    "ISK_fixed",
+#    "IZI_fixed",
 #    "KCTX_fixed",
-   # "KLYT_fixed",
-  #  "MDNY_fixed",
- #   "MRMT_fixed",
+#    "KLYT_fixed",
+#    "MDNY_fixed",
+#    "MRMT_fixed",
 #    "ORLT_fixed",
-   # "OSMT_fixed",
-  #  "TKR_fixed",
- #   "UKOP_fixed",
+#    "OSMT_fixed",
+#    "TKR_fixed",
+#    "UKOP_fixed",
 #    "YLV_fixed",
-
+    "SILIVRI2019"
 ]
+
 for dataset in DATASETS:
-    _eval_cross_testing("instance", dataset, "/mnt/second_drive/recovar/instance_test_big.csv")
-    _plot_roc("instance",dataset)
+    _eval_cross_testing("BALIKESIR2025", dataset, "/mnt/second_drive/recovar/BALIKESIR2025_DYNAMIC_8.csv")
+    _plot_roc("BALIKESIR2025",dataset)

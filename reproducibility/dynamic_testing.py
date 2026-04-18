@@ -17,16 +17,15 @@ def _eval_cross_testing(train_dataset, test_dataset, df_path):
     rows = []
     filters = [CropOffsetFilter()]
 
-    evaluator = Evaluator(exp_name = f"SILIVRI2019_DYNAMIC_3_002",
+    evaluator = Evaluator(exp_name = f"BALIKESIR_DYNAMIC_8",
                             representation_learning_model_class=REPRESENTATION_LEARNING_MODEL_CLASS,
                             classifier_model_class = CLASSIFIER_MODEL_CLASS,
                             train_dataset = train_dataset,
                             test_dataset = test_dataset,
                             filters = filters,
                             split = SPLIT,
-                            epochs=[99],
                             apply_resampling=False,
-                            report_best_val_score_epoch=False,
+                            report_best_val_score_epoch=True,
                             method_params={})
 
     roc_vectors = evaluator.get_roc_vectors()
@@ -39,9 +38,9 @@ def _eval_cross_testing(train_dataset, test_dataset, df_path):
     scores_df = pd.DataFrame(rows)
     scores_df.to_csv(df_path, mode='a', header=not os.path.exists(df_path), index=False)
 
-def _plot_roc(train_dataset, test_dataset, resample_eq_ratio):
+def _plot_roc(train_dataset, test_dataset): #, resample_eq_ratio):
     filters = [CropOffsetFilter()]
-    evaluator = Evaluator(exp_name = f"exp_{train_dataset}",
+    evaluator = Evaluator(exp_name = f"BALIKESIR_DYNAMIC_8",
                             representation_learning_model_class=REPRESENTATION_LEARNING_MODEL_CLASS,
                             classifier_model_class = CLASSIFIER_MODEL_CLASS,
                             train_dataset = train_dataset,
@@ -70,28 +69,31 @@ def _plot_roc(train_dataset, test_dataset, resample_eq_ratio):
     plt.title(f'Train:{train_dataset} Test:{test_dataset} ROC Curve')
     plt.legend()
     plt.grid(True)
-    plt.savefig(f"{train_dataset}_on_{test_dataset}_{resample_eq_ratio}_tpr-fpr.png")
+    plt.savefig(f"{train_dataset}_on_{test_dataset}_BALIKESIR_DYNAMIC_8_tpr-fpr.png")
 
 DATASETS = [
     "instance",
-    "BGKT_fixed",
-    "ERIK_fixed",
-    "SLVT_fixed",
-    "CTKS_fixed",
-    "GELI_fixed",
-    "GONE_fixed",
-    "ISK_fixed",
-    "IZI_fixed",
-    "KCTX_fixed",
-    "KLYT_fixed",
-    "MDNY_fixed",
-    "MRMT_fixed",
-    "ORLT_fixed",
-    "OSMT_fixed",
-    "TKR_fixed",
-    "UKOP_fixed",
-    "YLV_fixed"
+"BALIKESIR2025",
+#    "BGKT_fixed",
+#    "ERIK_fixed",
+#    "SLVT_fixed",
+#    "CTKS_fixed",
+#    "GELI_fixed",
+#    "GONE_fixed",
+#    "ISK_fixed",
+#    "IZI_fixed",
+#    "KCTX_fixed",
+#    "KLYT_fixed",
+#    "MDNY_fixed",
+#    "MRMT_fixed",
+#    "ORLT_fixed",
+#    "OSMT_fixed",
+#    "TKR_fixed",
+#    "UKOP_fixed",
+#    "YLV_fixed",
+    "SILIVRI2019"
 ]
 
 for dataset in DATASETS:
-    _eval_cross_testing("SILIVRI2019", dataset, "/home/ege/recovar/SILIVRI2019_DYNAMIC_3_002_all_last.csv")
+    _eval_cross_testing("BALIKESIR2025", dataset, "/mnt/second_drive/recovar/BALIKESIR2025_DYNAMIC_8.csv")
+    _plot_roc("BALIKESIR2025",dataset)

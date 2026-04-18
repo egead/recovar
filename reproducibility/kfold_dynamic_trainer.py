@@ -126,37 +126,52 @@ class KfoldDynamicTrainer(KfoldTrainer):
     
     def _get_dilation_number(self, epoch):
         dilation_numbers = np.logspace(np.log2(1.0), np.log2(self.final_dilation_number), base=2, num=self.epochs)
-        return np.round(dilation_numbers[epoch])
+        return np.round(dilation_numbers[epoch]).astype(np.int32)
     
-    def _train_one_epoch(self, model, optimizer, train_gen, classifier, epoch):
-        n_batches = len(train_gen)
-        epoch_losses = []
+    def _get_dilated_batch(self, train_gen, batch_iterator, dilation, classifier):
+        if dilation <= 1:
+            x_batch, _ = train_gen[batch_iterator]
+            return x_batch, batch_iterator + 1
 
         grouped_batches = []
         grouped_batch_scores = []
-        
-        for batch_idx in range(n_batches):
-            x_batch, y_batch = train_gen[batch_idx]
-            batch_scores = classifier(x_batch, training=False)
+
+        n_batches = len(train_gen)
+    
+        for _ in range(dilation):
+            if batch_iterator >= n_batches:
+                break
             
+            x_batch, _ = train_gen[batch_iterator]
+            batch_scores = classifier(x_batch, training=False)
+        
             grouped_batches.append(x_batch)
             grouped_batch_scores.append(batch_scores)
-            
-            dilation_number = self._get_dilation_number(epoch)
-                
-            if (batch_idx % dilation_number == 0) and (batch_idx > 0):
-                x_pool = np.concatenate(grouped_batches, axis=0)
-                kept_idxs = np.argsort(batch_scores)[::-1][0:BATCH_SIZE]
-                
-                x_train = x_pool[kept_idxs]
-        
-                loss = self._train_step(model, optimizer, x_train)
-                epoch_losses.append(float(loss))
+            batch_iterator += 1
 
-                grouped_batches = []
-                grouped_batch_scores = []
-                
-                print(f"Batch Loss: {loss:.4f}")
+        x_pool = np.concatenate(grouped_batches, axis=0)
+        scores = np.concatenate(grouped_batch_scores, axis=0)
+
+        kept_idxs = np.argsort(scores)[::-1][:BATCH_SIZE]
+        x_selected = x_pool[kept_idxs]
+
+        return x_selected, batch_iterator
+
+    def _train_one_epoch(self, model, optimizer, train_gen, classifier, epoch):
+        dilation = self._get_dilation_number(epoch)
+        n_batches = len(train_gen)
+        epoch_losses = []
+        batch_iterator = 0  
+
+        while batch_iterator < n_batches:
+            x_batch, batch_iterator = self._get_dilated_batch(
+                train_gen, batch_iterator, dilation, classifier
+            )
+            
+            loss = self._train_step(model, optimizer, x_batch)
+            epoch_losses.append(float(loss))
+
+            print(f"Batch {batch_iterator}/{n_batches} Loss: {loss:.4f}")
                 
         return np.mean(epoch_losses)
 
