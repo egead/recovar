@@ -163,7 +163,7 @@ def main():
     if args.title and not args.no_title:
         ax.set_title(args.title)
     elif not args.no_title:
-        ax.set_title(f"ROC — test on {args.test_dataset}")
+        ax.set_title(f"ROC curves: test on {args.test_dataset}")
 
     if args.log_fpr:
         ax.set_xscale("log")
