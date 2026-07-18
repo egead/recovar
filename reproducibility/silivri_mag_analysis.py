@@ -1,4 +1,7 @@
+import os
 from pathlib import Path
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 import matplotlib.pyplot as plt
 import numpy as np
