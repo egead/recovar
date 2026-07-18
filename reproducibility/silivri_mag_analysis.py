@@ -128,8 +128,10 @@ def attach_events(metadata, picks):
     picks = picks.copy()
     picks["station_key"] = picks[station].astype(str)
     picks[arrival] = pd.to_datetime(picks[arrival])
-    events = metadata.loc[metadata["label"].eq("eq")].sort_values("p_time")
-    picks = picks.sort_values(arrival)
+    events = metadata.loc[
+        metadata["label"].eq("eq") & metadata["p_time"].notna() & metadata["station_key"].notna()
+    ].sort_values("p_time")
+    picks = picks.loc[picks[arrival].notna() & picks["station_key"].notna()].sort_values(arrival)
     matched = pd.merge_asof(
         events,
         picks[["station_key", arrival, event_id, magnitude]],
