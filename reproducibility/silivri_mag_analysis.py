@@ -10,6 +10,7 @@ from recovar import ClassifierMultipleAutoencoder, RepresentationLearningMultipl
 
 ROOT = Path("/mnt/data_a/ege")
 PICKS = Path("/home/boxx/Public/earthquake_model_evaluations/data/SilivriPaper_2019-09-01__2019-11-30/processed_catalogs/kara74a_phase_picks.csv")
+CATALOG = Path(__file__).resolve().parent.parent / "silivri_durand_catalog.txt"
 RESULTS = ROOT / "recovar_results"
 OUTPUT = ROOT / "RECOVAR_SILIVRI2019" / "magnitude_analysis"
 EXPERIMENTS = {
@@ -63,7 +64,29 @@ def prepare_picks(picks):
         picks["magnitude"] = picks[magnitude]
         if picks["magnitude"].notna().any():
             return picks
-    raise RuntimeError(f"no magnitude-bearing event CSV was found in {PICKS.parent}")
+    catalog = pd.read_csv(
+        CATALOG,
+        sep=r"\s+",
+        skiprows=1,
+        header=None,
+        usecols=[1, 2, 3, 4, 5, 6, 11],
+        names=["year", "month", "day", "hour", "minute", "second", "magnitude"],
+    )
+    catalog["catalog_orgtime"] = pd.to_datetime(
+        catalog[["year", "month", "day", "hour", "minute"]]
+    ) + pd.to_timedelta(catalog["second"], unit="s")
+    picks["_orgtime"] = pd.to_datetime(picks["orgtime"])
+    picks = pd.merge_asof(
+        picks.sort_values("_orgtime"),
+        catalog[["catalog_orgtime", "magnitude"]].sort_values("catalog_orgtime"),
+        left_on="_orgtime",
+        right_on="catalog_orgtime",
+        direction="nearest",
+        tolerance=pd.Timedelta(seconds=1),
+    )
+    if not picks["magnitude"].notna().any():
+        raise RuntimeError(f"no events in {CATALOG} matched the phase-pick origin times")
+    return picks
 
 
 def load_model_result(experiment, epoch):
