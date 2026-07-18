@@ -16,15 +16,17 @@ from recovar import ClassifierMultipleAutoencoder, RepresentationLearningMultipl
 ROOT = Path("/mnt/data_a/ege")
 PICKS = Path("/home/boxx/Public/earthquake_model_evaluations/data/SilivriPaper_2019-09-01__2019-11-30/processed_catalogs/kara74a_phase_picks.csv")
 CATALOG = Path(__file__).resolve().parent.parent / "silivri_durand_catalog.txt"
+CACHE = Path(__file__).resolve().parent.parent / "silivri_mag_cache.npz"
 RESULTS = ROOT / "recovar_results"
 OUTPUT = ROOT / "RECOVAR_SILIVRI2019" / "magnitude_analysis"
 EXPERIMENTS = {
     "No dilation": ("SILIVRI2019_NODILATION_20EP", 18),
     "Dilation": ("SILIVRI2019_DYNAMIC_64", 6),
 }
-TARGET_FPR = 0.01
 MATCH_TOLERANCE_SECONDS = 0.05
 BIN_EDGES = np.arange(0.5, 6.6, 0.5)
+COINCIDENCE_WINDOW_SECONDS = 20.0
+COINCIDENCE_LEVELS = [1, 3]
 
 
 def result_dir(experiment):
@@ -151,49 +153,164 @@ def attach_events(metadata, picks):
     return matched, event_id, magnitude
 
 
-def threshold_at_fpr(metadata):
-    noise = metadata.loc[metadata["label"].eq("no"), "score"].dropna().to_numpy()
-    if not len(noise):
-        raise RuntimeError("no noise windows available for threshold selection")
-    return float(np.quantile(noise, 1.0 - TARGET_FPR))
+def nth_station_score(frame, group_column, min_stations):
+    station_scores = frame.groupby([group_column, "station_name"], as_index=False)["score"].max()
+    return station_scores.groupby(group_column)["score"].apply(
+        lambda values: np.sort(values.to_numpy())[-min_stations] if len(values) >= min_stations else -np.inf
+    )
+
+
+def event_scores_by_coincidence(matched, event_id, magnitude, min_stations):
+    scores = nth_station_score(matched, event_id, min_stations).rename("score")
+    magnitudes = matched.groupby(event_id)[magnitude].first()
+    return pd.concat([magnitudes, scores], axis=1).reset_index()
+
+
+def noise_coincidence_scores(metadata, min_stations):
+    noise = metadata.loc[metadata["label"].eq("no")].copy()
+    crop_values = noise["crop_offset"] if "crop_offset" in noise.columns else pd.Series(0, index=noise.index)
+    crop_offset = pd.to_numeric(crop_values, errors="coerce").fillna(0)
+    noise["detection_time"] = pd.to_datetime(noise["trace_start_time"]) + pd.to_timedelta(
+        crop_offset / 100.0 + 15.0,
+        unit="s",
+    )
+    noise = noise.dropna(subset=["detection_time", "score", "station_name"]).sort_values("detection_time")
+    times = noise["detection_time"].to_numpy(dtype="datetime64[ns]")
+    stations = noise["station_name"].astype(str).to_numpy()
+    scores = noise["score"].to_numpy()
+    window = np.timedelta64(int(COINCIDENCE_WINDOW_SECONDS * 1e9), "ns")
+    coincidence_scores = []
+    i = 0
+    while i < len(noise):
+        j = int(np.searchsorted(times, times[i] + window, side="right"))
+        station_maxima = {}
+        for station, score in zip(stations[i:j], scores[i:j]):
+            station_maxima[station] = max(score, station_maxima.get(station, -np.inf))
+        if len(station_maxima) >= min_stations:
+            coincidence_scores.append(np.sort(np.fromiter(station_maxima.values(), dtype=float))[-min_stations])
+        i = j
+    return np.sort(np.asarray(coincidence_scores, dtype=float))
+
+
+def metrics_at_threshold(event_scores, sorted_noise, threshold):
+    tp = int(np.sum(event_scores >= threshold))
+    fn = int(len(event_scores) - tp)
+    fp = int(len(sorted_noise) - np.searchsorted(sorted_noise, threshold, side="left"))
+    recall = tp / len(event_scores) if len(event_scores) else 0.0
+    precision = tp / (tp + fp) if tp + fp else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+    return {
+        "threshold": float(threshold),
+        "tp": tp,
+        "fp": fp,
+        "fn": fn,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+    }
+
+
+def operating_points(events, noise_scores):
+    event_scores = events["score"].dropna().to_numpy()
+    sorted_noise = np.sort(noise_scores)
+    if not len(event_scores) or not len(sorted_noise):
+        raise RuntimeError("event and noise scores are required to select operating points")
+    quantiles = np.linspace(0.0, 1.0, 2001)
+    candidates = np.unique(np.concatenate([event_scores, np.quantile(sorted_noise, quantiles)]))
+    metrics = [metrics_at_threshold(event_scores, sorted_noise, threshold) for threshold in candidates]
+    best_recall = max(metrics, key=lambda item: (round(item["recall"], 12), item["precision"], item["threshold"]))
+    best_f1 = max(metrics, key=lambda item: (item["f1"], item["recall"], item["threshold"]))
+    return {"High recall": best_recall, "Best F1": best_f1}
 
 
 def main():
     picks = prepare_picks(pd.read_csv(PICKS))
     model_events = {}
-    thresholds = {}
+    model_noise = {}
+    model_points = {}
     event_id = None
     magnitude = None
     for label, (experiment, epoch) in EXPERIMENTS.items():
         metadata = load_model_result(experiment, epoch)
-        thresholds[label] = threshold_at_fpr(metadata)
         matched, event_id, magnitude = attach_events(metadata, picks)
-        model_events[label] = matched.groupby(event_id, as_index=False).agg({magnitude: "first", "score": "max"})
-    catalog_events = picks[[event_id, magnitude]].dropna().drop_duplicates(event_id)
+        model_events[label] = {}
+        model_noise[label] = {}
+        model_points[label] = {}
+        for min_stations in COINCIDENCE_LEVELS:
+            events = event_scores_by_coincidence(matched, event_id, magnitude, min_stations)
+            noise_scores = noise_coincidence_scores(metadata, min_stations)
+            model_events[label][min_stations] = events
+            model_noise[label][min_stations] = noise_scores
+            model_points[label][min_stations] = operating_points(events, noise_scores)
+    cache = {}
+    for model_name in model_events:
+        key = model_name.lower().replace(" ", "_")
+        for min_stations in COINCIDENCE_LEVELS:
+            events = model_events[model_name][min_stations]
+            prefix = f"{key}_{min_stations}station"
+            cache[f"{prefix}_event_id"] = events[event_id].astype(str).to_numpy()
+            cache[f"{prefix}_magnitude"] = events[magnitude].to_numpy(dtype=float)
+            cache[f"{prefix}_event_score"] = events["score"].to_numpy(dtype=float)
+            cache[f"{prefix}_noise_score"] = model_noise[model_name][min_stations]
+    np.savez_compressed(CACHE, **cache)
     summaries = []
-    for label, events in model_events.items():
-        events = events.copy()
-        events["detected"] = events["score"] >= thresholds[label]
-        events["magnitude_bin"] = pd.cut(events[magnitude], BIN_EDGES, right=False)
-        summary = events.groupby("magnitude_bin", observed=False)["detected"].agg(["sum", "count"]).reset_index()
-        summary["recall"] = summary["sum"] / summary["count"].replace(0, np.nan)
-        summary["model"] = label
-        summary["threshold"] = thresholds[label]
-        summaries.append(summary)
+    for label in model_events:
+        for min_stations in COINCIDENCE_LEVELS:
+            events = model_events[label][min_stations]
+            for point_name, point in model_points[label][min_stations].items():
+                selected = events.copy()
+                selected["detected"] = selected["score"] >= point["threshold"]
+                selected["magnitude_bin"] = pd.cut(selected[magnitude], BIN_EDGES, right=False)
+                summary = selected.groupby("magnitude_bin", observed=False)["detected"].agg(["sum", "count"]).reset_index()
+                summary = summary.rename(columns={"sum": "detected", "count": "total"})
+                summary["missed"] = summary["total"] - summary["detected"]
+                summary["magnitude_recall"] = summary["detected"] / summary["total"].replace(0, np.nan)
+                summary["model"] = label
+                summary["min_stations"] = min_stations
+                summary["operating_point"] = point_name
+                for key, value in point.items():
+                    summary[key] = value
+                summaries.append(summary)
     summary = pd.concat(summaries, ignore_index=True)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     summary.to_csv(OUTPUT / "silivri_recall_by_magnitude.csv", index=False)
-    fig, axes = plt.subplots(2, 1, figsize=(7.2, 7.0), sharex=True, gridspec_kw={"height_ratios": [1, 1.4]})
-    axes[0].hist(catalog_events[magnitude], bins=BIN_EDGES, color="0.45", edgecolor="white")
-    axes[0].set_ylabel("Catalog events")
+    point_names = ["High recall", "Best F1"]
+    model_names = list(EXPERIMENTS)
+    colors = {"No dilation": "#3b6ea8", "Dilation": "#d95f45"}
+    panel_rows = [(stations, point) for stations in COINCIDENCE_LEVELS for point in point_names]
+    fig, axes = plt.subplots(len(panel_rows), 2, figsize=(9.0, 12.0), sharex=True, sharey=True)
     centers = BIN_EDGES[:-1] + np.diff(BIN_EDGES) / 2
-    for label in EXPERIMENTS:
-        recall = summary.loc[summary["model"].eq(label), "recall"].to_numpy()
-        axes[1].plot(centers, recall, marker="o", label=label)
-    axes[1].set_xlabel("Magnitude")
-    axes[1].set_ylabel("Event recall")
-    axes[1].set_ylim(0, 1.05)
-    axes[1].legend(frameon=False)
+    for row, (min_stations, point_name) in enumerate(panel_rows):
+        for col, model_name in enumerate(model_names):
+            ax = axes[row, col]
+            values = summary.loc[
+                summary["model"].eq(model_name)
+                & summary["min_stations"].eq(min_stations)
+                & summary["operating_point"].eq(point_name)
+            ]
+            total = values["total"].to_numpy()
+            detected = values["detected"].to_numpy()
+            point = model_points[model_name][min_stations][point_name]
+            ax.bar(centers, total, width=np.diff(BIN_EDGES) * 0.92, color="0.88", edgecolor="0.35", linewidth=0.7, label="Missed")
+            ax.bar(centers, detected, width=np.diff(BIN_EDGES) * 0.92, color=colors[model_name], edgecolor="0.2", linewidth=0.5, label="Detected")
+            ax.set_title(f"{model_name} — {min_stations}-station — {point_name}")
+            ax.text(
+                0.98,
+                0.95,
+                f"Recall={point['recall']:.3f}\nPrecision={point['precision']:.3f}\n$F_1$={point['f1']:.3f}",
+                transform=ax.transAxes,
+                ha="right",
+                va="top",
+                fontsize=9,
+            )
+            ax.spines[["top", "right"]].set_visible(False)
+            ax.grid(axis="y", color="0.88", linewidth=0.6)
+            ax.set_axisbelow(True)
+    axes[0, 0].legend(frameon=False)
+    axes[-1, 0].set_xlabel("Magnitude")
+    axes[-1, 1].set_xlabel("Magnitude")
+    for row in range(len(panel_rows)):
+        axes[row, 0].set_ylabel("Number of catalog events")
     fig.tight_layout()
     fig.savefig(OUTPUT / "silivri_magnitude_analysis.pdf", bbox_inches="tight")
     fig.savefig(OUTPUT / "silivri_magnitude_analysis.png", dpi=300, bbox_inches="tight")
