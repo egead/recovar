@@ -32,6 +32,40 @@ def column(frame, names):
     raise KeyError(f"none of {names} found; available columns: {list(frame.columns)}")
 
 
+def prepare_picks(picks):
+    picks = picks.copy()
+    if not any(name in picks.columns for name in ["event_id", "source_id", "event", "origin_id"]):
+        picks["event_id"] = pd.to_datetime(picks["orgtime"]).astype(str)
+    if any(name in picks.columns for name in ["magnitude", "mag", "source_magnitude", "event_magnitude"]):
+        return picks
+    for path in PICKS.parent.glob("*.csv"):
+        if path == PICKS:
+            continue
+        candidate = pd.read_csv(path)
+        origin_names = [name for name in ["orgtime", "origin_time", "time", "datetime"] if name in candidate.columns]
+        magnitude_names = [name for name in ["magnitude", "mag", "source_magnitude", "event_magnitude"] if name in candidate.columns]
+        if not origin_names or not magnitude_names:
+            continue
+        origin = origin_names[0]
+        magnitude = magnitude_names[0]
+        event_magnitudes = candidate[[origin, magnitude]].dropna().copy()
+        event_magnitudes[origin] = pd.to_datetime(event_magnitudes[origin])
+        event_magnitudes = event_magnitudes.sort_values(origin)
+        picks["_orgtime"] = pd.to_datetime(picks["orgtime"])
+        picks = pd.merge_asof(
+            picks.sort_values("_orgtime"),
+            event_magnitudes,
+            left_on="_orgtime",
+            right_on=origin,
+            direction="nearest",
+            tolerance=pd.Timedelta(seconds=0.1),
+        )
+        picks["magnitude"] = picks[magnitude]
+        if picks["magnitude"].notna().any():
+            return picks
+    raise RuntimeError(f"no magnitude-bearing event CSV was found in {PICKS.parent}")
+
+
 def load_model_result(experiment, epoch):
     directory = result_dir(experiment)
     if not (directory / "meta.csv").exists() or not (directory / f"scores{epoch}.csv").exists():
@@ -95,7 +129,7 @@ def threshold_at_fpr(metadata):
 
 
 def main():
-    picks = pd.read_csv(PICKS)
+    picks = prepare_picks(pd.read_csv(PICKS))
     model_events = {}
     thresholds = {}
     event_id = None
