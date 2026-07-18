@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from kfold_tester import KFoldTester
+from recovar import ClassifierMultipleAutoencoder, RepresentationLearningMultipleAutoencoder
+
 
 ROOT = Path("/mnt/data_a/ege")
 PICKS = Path("/home/boxx/Public/earthquake_model_evaluations/data/SilivriPaper_2019-09-01__2019-11-30/processed_catalogs/kara74a_phase_picks.csv")
@@ -11,7 +14,7 @@ RESULTS = ROOT / "recovar_results"
 OUTPUT = ROOT / "RECOVAR_SILIVRI2019" / "magnitude_analysis"
 EXPERIMENTS = {
     "No dilation": ("SILIVRI2019_NODILATION_20EP", 18),
-    "Dilation": ("SILIVRI2019_dilation64", 6),
+    "Dilation": ("SILIVRI2019_DYNAMIC_64", 6),
 }
 TARGET_FPR = 0.01
 MATCH_TOLERANCE_SECONDS = 0.05
@@ -19,7 +22,7 @@ BIN_EDGES = np.arange(0.5, 6.6, 0.5)
 
 
 def result_dir(experiment):
-    return RESULTS / experiment / "autoencoder" / "autocovariance" / "training_SILIVRI2019" / "testing_SILIVRI2019" / "split0"
+    return RESULTS / experiment / "representation_learning_autoencoder_ensemble" / "representation_cross_covariances" / "training_SILIVRI2019" / "testing_SILIVRI2019" / "split0"
 
 
 def column(frame, names):
@@ -31,6 +34,21 @@ def column(frame, names):
 
 def load_model_result(experiment, epoch):
     directory = result_dir(experiment)
+    if not (directory / "meta.csv").exists() or not (directory / f"scores{epoch}.csv").exists():
+        tester = KFoldTester(
+            exp_name=experiment,
+            representation_learning_model_class=RepresentationLearningMultipleAutoencoder,
+            classifier_model_class=ClassifierMultipleAutoencoder,
+            train_dataset="SILIVRI2019",
+            test_dataset="SILIVRI2019",
+            split=0,
+            epochs=[epoch],
+            apply_resampling=False,
+            resample_while_keeping_total_waveforms_fixed=False,
+            resample_eq_ratio=0.5,
+            method_params={},
+        )
+        tester.test()
     metadata = pd.read_csv(directory / "meta.csv").drop(columns=["Unnamed: 0", "index"], errors="ignore")
     scores = pd.read_csv(directory / f"scores{epoch}.csv")["eq_probabilities"].to_numpy()
     if len(metadata) != len(scores):
