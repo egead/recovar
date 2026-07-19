@@ -11,6 +11,7 @@ import pandas as pd
 from sklearn.metrics import roc_auc_score
 
 from kfold_tester import KFoldTester
+from kfold_environment import KFoldEnvironment
 from recovar import ClassifierMultipleAutoencoder, RepresentationLearningMultipleAutoencoder
 
 
@@ -18,6 +19,7 @@ ROOT = Path("/mnt/data_a/ege")
 PICKS = Path("/home/boxx/Public/earthquake_model_evaluations/data/SilivriPaper_2019-09-01__2019-11-30/processed_catalogs/kara74a_phase_picks.csv")
 CATALOG = Path(__file__).resolve().parent.parent / "silivri_durand_catalog.txt"
 CACHE = Path(__file__).resolve().parent.parent / "silivri_mag_cache.npz"
+PHASENET_CACHE = Path(__file__).resolve().parent.parent / "phasenet_instance_silivri_scores.npz"
 RESULTS = ROOT / "recovar_results"
 OUTPUT = ROOT / "RECOVAR_SILIVRI2019" / "magnitude_analysis"
 EXPERIMENTS = {
@@ -29,6 +31,7 @@ MATCH_TOLERANCE_SECONDS = 0.05
 COINCIDENCE_WINDOW_SECONDS = 20.0
 COINCIDENCE_LEVELS = [1]
 HISTOGRAM_EDGES = np.arange(0.5, 5.76, 0.25)
+PERCENTILE_COLORS = ["#dbe9f6", "#a9cce8", "#74a9cf", "#3f7fba", "#175a94"]
 
 
 def result_dir(experiment, train_dataset):
@@ -121,6 +124,50 @@ def load_model_result(experiment, epoch, train_dataset):
         raise ValueError(f"metadata and scores differ in length for {experiment}")
     metadata["score"] = scores
     return metadata
+
+
+def load_phasenet_instance_result(reference_metadata):
+    if PHASENET_CACHE.exists():
+        scores = np.load(PHASENET_CACHE)["scores"]
+    else:
+        import torch
+        import seisbench.models as sbm
+
+        model = sbm.PhaseNet.from_pretrained("instance")
+        model.eval()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model.to(device)
+        labels = list(model.labels)
+        p_index = labels.index("P")
+        environment = KFoldEnvironment(
+            "SILIVRI2019",
+            apply_resampling=False,
+            resample_eq_ratio=0.5,
+            resample_while_keeping_total_waveforms_fixed=False,
+        )
+        _, _, _, generator = environment.get_generators(0)
+        outputs = []
+        with torch.inference_mode():
+            for batch_index in range(len(generator)):
+                batch = np.asarray(generator[batch_index], dtype=np.float32)
+                batch = np.transpose(batch[:, :, [2, 1, 0]], (0, 2, 1))
+                batch = batch - batch.mean(axis=2, keepdims=True)
+                batch = batch / (batch.std(axis=2, keepdims=True) + 1e-10)
+                batch = np.pad(batch, ((0, 0), (0, 0), (0, 1)))
+                prediction = model(torch.from_numpy(batch).to(device))
+                if isinstance(prediction, (tuple, list)):
+                    prediction = prediction[0]
+                if prediction.min() < 0 or prediction.max() > 1:
+                    prediction = torch.softmax(prediction, dim=1)
+                outputs.append(prediction[:, p_index, :].amax(dim=1).cpu().numpy())
+                print(f"PhaseNet completed:{batch_index + 1}/{len(generator)}")
+        scores = np.concatenate(outputs)
+        np.savez_compressed(PHASENET_CACHE, scores=scores)
+    if len(reference_metadata) != len(scores):
+        raise ValueError("PhaseNet scores and Silivri test metadata differ in length")
+    result = reference_metadata.copy()
+    result["score"] = scores
+    return result
 
 
 def attach_events(metadata, picks):
@@ -242,14 +289,49 @@ def save_magnitude_histogram(magnitudes, title, stem):
     fig.savefig(OUTPUT / f"{stem}.png", dpi=300, bbox_inches="tight")
 
 
+def save_test_histogram(magnitudes, magnitude_edges):
+    counts, _ = np.histogram(magnitudes, bins=magnitude_edges)
+    widths = np.diff(magnitude_edges)
+    fig, ax = plt.subplots(figsize=(8.5, 4.2))
+    bars = ax.bar(
+        magnitude_edges[:-1],
+        counts,
+        width=widths,
+        align="edge",
+        color=PERCENTILE_COLORS,
+        edgecolor="white",
+        linewidth=1.0,
+    )
+    for index, (bar, count) in enumerate(zip(bars, counts)):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height(),
+            f"{index * 20}–{(index + 1) * 20}%\nn={count}",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+        )
+    ax.set_xlabel("Magnitude")
+    ax.set_ylabel("Number of events")
+    ax.set_title("Matched test-set magnitude distribution")
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.grid(axis="y", color="0.88", linewidth=0.6)
+    ax.set_axisbelow(True)
+    fig.tight_layout()
+    fig.savefig(OUTPUT / "silivri_test_magnitude_histogram.pdf", bbox_inches="tight")
+    fig.savefig(OUTPUT / "silivri_test_magnitude_histogram.png", dpi=300, bbox_inches="tight")
+
+
 def main():
     picks = prepare_picks(pd.read_csv(PICKS))
     model_events = {}
     model_noise = {}
     event_id = None
     magnitude = None
+    reference_metadata = None
     for label, (experiment, epoch, train_dataset) in EXPERIMENTS.items():
         metadata = load_model_result(experiment, epoch, train_dataset)
+        reference_metadata = metadata
         matched, event_id, magnitude = attach_events(metadata, picks)
         model_events[label] = {}
         model_noise[label] = {}
@@ -258,6 +340,17 @@ def main():
             noise_scores = noise_coincidence_scores(metadata, min_stations)
             model_events[label][min_stations] = events
             model_noise[label][min_stations] = noise_scores
+    phasenet_metadata = load_phasenet_instance_result(reference_metadata)
+    matched, event_id, magnitude = attach_events(phasenet_metadata, picks)
+    model_events["PhaseNet-INSTANCE"] = {}
+    model_noise["PhaseNet-INSTANCE"] = {}
+    for min_stations in COINCIDENCE_LEVELS:
+        model_events["PhaseNet-INSTANCE"][min_stations] = event_scores_by_coincidence(
+            matched, event_id, magnitude, min_stations
+        )
+        model_noise["PhaseNet-INSTANCE"][min_stations] = noise_coincidence_scores(
+            phasenet_metadata, min_stations
+        )
     cache = {}
     for model_name in model_events:
         key = model_name.lower().replace(" ", "_")
@@ -277,9 +370,14 @@ def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     auc_summary.to_csv(OUTPUT / "silivri_auc_by_magnitude.csv", index=False)
     model_names = list(EXPERIMENTS)
-    colors = {"No dilation": "#3b6ea8", "Dilation": "#d95f45", "INSTANCE-trained": "#4c956c"}
+    colors = {"No dilation": "#3b6ea8", "Dilation": "#d95f45", "INSTANCE-trained": "#4c956c", "PhaseNet-INSTANCE": "#8b5ea7"}
     auc_fig, ax = plt.subplots(figsize=(9.0, 5.2))
-    labels = [f"[{left:.2f}, {right:.2f})" for left, right in zip(magnitude_edges[:-1], magnitude_edges[1:])]
+    labels = [
+        f"{left_pct}–{right_pct}%\n[{left:.2f}, {right:.2f})"
+        for left_pct, right_pct, left, right in zip(
+            range(0, 100, 20), range(20, 101, 20), magnitude_edges[:-1], magnitude_edges[1:]
+        )
+    ]
     x = np.arange(len(labels))
     width = 0.8 / len(model_names)
     truth = pd.read_csv(CATALOG, sep=r"\s+", skiprows=1, header=None, usecols=[11], names=["magnitude"])
@@ -288,11 +386,7 @@ def main():
         "Durand catalog magnitude distribution",
         "silivri_catalog_magnitude_histogram",
     )
-    save_magnitude_histogram(
-        reference_events[magnitude].dropna().to_numpy(),
-        "Matched test-set magnitude distribution",
-        "silivri_test_magnitude_histogram",
-    )
+    save_test_histogram(reference_events[magnitude].dropna().to_numpy(), magnitude_edges)
     for col, model_name in enumerate(model_names):
         values = auc_summary.loc[
             auc_summary["model"].eq(model_name) & auc_summary["min_stations"].eq(1)
@@ -320,6 +414,10 @@ def main():
     ax.grid(axis="y", color="0.88", linewidth=0.6)
     ax.set_axisbelow(True)
     ax.set_xticks(x, labels, rotation=45, ha="right")
+    for tick, color in zip(ax.get_xticklabels(), PERCENTILE_COLORS):
+        tick.set_color("0.1")
+        tick.set_fontweight("bold")
+        tick.set_bbox({"facecolor": color, "edgecolor": "none", "alpha": 0.85, "pad": 1.5})
     ax.set_xlabel("Magnitude interval")
     auc_fig.tight_layout()
     auc_fig.savefig(OUTPUT / "silivri_auc_by_magnitude.pdf", bbox_inches="tight")
