@@ -11,7 +11,6 @@ import pandas as pd
 from sklearn.metrics import roc_auc_score
 
 from kfold_tester import KFoldTester
-from kfold_environment import KFoldEnvironment
 from recovar import ClassifierMultipleAutoencoder, RepresentationLearningMultipleAutoencoder
 
 
@@ -45,10 +44,17 @@ def column(frame, names):
     raise KeyError(f"none of {names} found; available columns: {list(frame.columns)}")
 
 
+def parse_mixed_datetime(values):
+    try:
+        return pd.to_datetime(values, format="mixed")
+    except (TypeError, ValueError):
+        return values.map(lambda value: pd.to_datetime(value) if pd.notna(value) else pd.NaT)
+
+
 def prepare_picks(picks):
     picks = picks.copy()
     if not any(name in picks.columns for name in ["event_id", "source_id", "event", "origin_id"]):
-        picks["event_id"] = pd.to_datetime(picks["orgtime"]).astype(str)
+        picks["event_id"] = parse_mixed_datetime(picks["orgtime"]).astype(str)
     if any(name in picks.columns for name in ["magnitude", "mag", "source_magnitude", "event_magnitude"]):
         return picks
     for path in PICKS.parent.glob("*.csv"):
@@ -62,9 +68,9 @@ def prepare_picks(picks):
         origin = origin_names[0]
         magnitude = magnitude_names[0]
         event_magnitudes = candidate[[origin, magnitude]].dropna().copy()
-        event_magnitudes[origin] = pd.to_datetime(event_magnitudes[origin])
+        event_magnitudes[origin] = parse_mixed_datetime(event_magnitudes[origin])
         event_magnitudes = event_magnitudes.sort_values(origin)
-        picks["_orgtime"] = pd.to_datetime(picks["orgtime"])
+        picks["_orgtime"] = parse_mixed_datetime(picks["orgtime"])
         picks = pd.merge_asof(
             picks.sort_values("_orgtime"),
             event_magnitudes,
@@ -87,7 +93,7 @@ def prepare_picks(picks):
     catalog["catalog_orgtime"] = pd.to_datetime(
         catalog[["year", "month", "day", "hour", "minute"]]
     ) + pd.to_timedelta(catalog["second"], unit="s")
-    picks["_orgtime"] = pd.to_datetime(picks["orgtime"])
+    picks["_orgtime"] = parse_mixed_datetime(picks["orgtime"])
     picks = pd.merge_asof(
         picks.sort_values("_orgtime"),
         catalog[["catalog_orgtime", "magnitude"]].sort_values("catalog_orgtime"),
@@ -127,42 +133,11 @@ def load_model_result(experiment, epoch, train_dataset):
 
 
 def load_phasenet_instance_result(reference_metadata):
-    if PHASENET_CACHE.exists():
-        scores = np.load(PHASENET_CACHE)["scores"]
-    else:
-        import torch
-        import seisbench.models as sbm
-
-        model = sbm.PhaseNet.from_pretrained("instance")
-        model.eval()
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model.to(device)
-        labels = list(model.labels)
-        p_index = labels.index("P")
-        environment = KFoldEnvironment(
-            "SILIVRI2019",
-            apply_resampling=False,
-            resample_eq_ratio=0.5,
-            resample_while_keeping_total_waveforms_fixed=False,
+    if not PHASENET_CACHE.exists():
+        raise FileNotFoundError(
+            f"{PHASENET_CACHE} is missing; run python silivri_phasenet_cache.py in the PyTorch/SeisBench environment"
         )
-        _, _, _, generator = environment.get_generators(0)
-        outputs = []
-        with torch.inference_mode():
-            for batch_index in range(len(generator)):
-                batch = np.asarray(generator[batch_index], dtype=np.float32)
-                batch = np.transpose(batch[:, :, [2, 1, 0]], (0, 2, 1))
-                batch = batch - batch.mean(axis=2, keepdims=True)
-                batch = batch / (batch.std(axis=2, keepdims=True) + 1e-10)
-                batch = np.pad(batch, ((0, 0), (0, 0), (0, 1)))
-                prediction = model(torch.from_numpy(batch).to(device))
-                if isinstance(prediction, (tuple, list)):
-                    prediction = prediction[0]
-                if prediction.min() < 0 or prediction.max() > 1:
-                    prediction = torch.softmax(prediction, dim=1)
-                outputs.append(prediction[:, p_index, :].amax(dim=1).cpu().numpy())
-                print(f"PhaseNet completed:{batch_index + 1}/{len(generator)}")
-        scores = np.concatenate(outputs)
-        np.savez_compressed(PHASENET_CACHE, scores=scores)
+    scores = np.load(PHASENET_CACHE)["scores"]
     if len(reference_metadata) != len(scores):
         raise ValueError("PhaseNet scores and Silivri test metadata differ in length")
     result = reference_metadata.copy()
@@ -176,14 +151,14 @@ def attach_events(metadata, picks):
     event_id = column(picks, ["event_id", "source_id", "event", "origin_id"])
     magnitude = column(picks, ["magnitude", "mag", "source_magnitude", "event_magnitude"])
     metadata = metadata.copy()
-    metadata["p_time"] = pd.to_datetime(metadata["trace_start_time"]) + pd.to_timedelta(
+    metadata["p_time"] = parse_mixed_datetime(metadata["trace_start_time"]) + pd.to_timedelta(
         pd.to_numeric(metadata["p_arrival_sample"], errors="coerce") / 100.0,
         unit="s",
     )
     metadata["station_key"] = metadata["station_name"].astype(str)
     picks = picks.copy()
     picks["station_key"] = picks[station].astype(str)
-    picks[arrival] = pd.to_datetime(picks[arrival])
+    picks[arrival] = parse_mixed_datetime(picks[arrival])
     events = metadata.loc[
         metadata["label"].eq("eq") & metadata["p_time"].notna() & metadata["station_key"].notna()
     ].sort_values("p_time")
@@ -219,7 +194,7 @@ def noise_coincidence_scores(metadata, min_stations):
     noise = metadata.loc[metadata["label"].eq("no")].copy()
     crop_values = noise["crop_offset"] if "crop_offset" in noise.columns else pd.Series(0, index=noise.index)
     crop_offset = pd.to_numeric(crop_values, errors="coerce").fillna(0)
-    noise["detection_time"] = pd.to_datetime(noise["trace_start_time"]) + pd.to_timedelta(
+    noise["detection_time"] = parse_mixed_datetime(noise["trace_start_time"]) + pd.to_timedelta(
         crop_offset / 100.0 + 15.0,
         unit="s",
     )
