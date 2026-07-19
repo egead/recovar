@@ -265,30 +265,22 @@ def save_magnitude_histogram(magnitudes, title, stem):
 
 
 def save_test_histogram(magnitudes, magnitude_edges):
-    counts, _ = np.histogram(magnitudes, bins=magnitude_edges)
-    widths = np.diff(magnitude_edges)
     fig, ax = plt.subplots(figsize=(8.5, 4.2))
-    bars = ax.bar(
-        magnitude_edges[:-1],
-        counts,
-        width=widths,
-        align="edge",
-        color=PERCENTILE_COLORS,
-        edgecolor="white",
-        linewidth=1.0,
-    )
-    for index, (bar, count) in enumerate(zip(bars, counts)):
-        ax.text(
-            bar.get_x() + bar.get_width() / 2,
-            bar.get_height(),
-            f"{index * 20}–{(index + 1) * 20}%\nn={count}",
-            ha="center",
-            va="bottom",
-            fontsize=9,
+    ax.hist(magnitudes, bins=HISTOGRAM_EDGES, color="0.45", edgecolor="white", linewidth=0.7)
+    for percentile, value, color in zip(
+        [20, 40, 60, 80], magnitude_edges[1:-1], PERCENTILE_COLORS[1:]
+    ):
+        ax.axvline(
+            value,
+            color=color,
+            linestyle="--",
+            linewidth=1.5,
+            label=f"{percentile}th percentile ($M={value:.2f}$)",
         )
     ax.set_xlabel("Magnitude")
     ax.set_ylabel("Number of events")
     ax.set_title("Matched test-set magnitude distribution")
+    ax.legend(frameon=False, fontsize=8)
     ax.spines[["top", "right"]].set_visible(False)
     ax.grid(axis="y", color="0.88", linewidth=0.6)
     ax.set_axisbelow(True)
@@ -344,7 +336,7 @@ def main():
     auc_summary = magnitude_auc_rows(model_events, model_noise, magnitude, magnitude_edges)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     auc_summary.to_csv(OUTPUT / "silivri_auc_by_magnitude.csv", index=False)
-    model_names = list(EXPERIMENTS)
+    model_names = list(model_events)
     colors = {"No dilation": "#3b6ea8", "Dilation": "#d95f45", "INSTANCE-trained": "#4c956c", "PhaseNet-INSTANCE": "#8b5ea7"}
     auc_fig, ax = plt.subplots(figsize=(9.0, 5.2))
     labels = [
@@ -389,10 +381,6 @@ def main():
     ax.grid(axis="y", color="0.88", linewidth=0.6)
     ax.set_axisbelow(True)
     ax.set_xticks(x, labels, rotation=45, ha="right")
-    for tick, color in zip(ax.get_xticklabels(), PERCENTILE_COLORS):
-        tick.set_color("0.1")
-        tick.set_fontweight("bold")
-        tick.set_bbox({"facecolor": color, "edgecolor": "none", "alpha": 0.85, "pad": 1.5})
     ax.set_xlabel("Magnitude interval")
     auc_fig.tight_layout()
     auc_fig.savefig(OUTPUT / "silivri_auc_by_magnitude.pdf", bbox_inches="tight")
