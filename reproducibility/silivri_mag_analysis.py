@@ -22,8 +22,9 @@ CACHE = Path(__file__).resolve().parent.parent / "silivri_mag_cache.npz"
 RESULTS = ROOT / "recovar_results"
 OUTPUT = ROOT / "RECOVAR_SILIVRI2019" / "magnitude_analysis"
 EXPERIMENTS = {
-    "No dilation": ("SILIVRI2019_NODILATION_20EP", 18),
-    "Dilation": ("SILIVRI2019_DYNAMIC_64", 6),
+    "No dilation": ("SILIVRI2019_NODILATION_20EP", 18, "SILIVRI2019"),
+    "Dilation": ("SILIVRI2019_DYNAMIC_64", 6, "SILIVRI2019"),
+    "INSTANCE-trained": ("exp_instance", 11, "instance"),
 }
 MATCH_TOLERANCE_SECONDS = 0.05
 BIN_EDGES = np.arange(0.5, 6.6, 0.5)
@@ -31,8 +32,8 @@ COINCIDENCE_WINDOW_SECONDS = 20.0
 COINCIDENCE_LEVELS = [1]
 
 
-def result_dir(experiment):
-    return RESULTS / experiment / "representation_learning_autoencoder_ensemble" / "representation_cross_covariances" / "training_SILIVRI2019" / "testing_SILIVRI2019" / "split0"
+def result_dir(experiment, train_dataset):
+    return RESULTS / experiment / "representation_learning_autoencoder_ensemble" / "representation_cross_covariances" / f"training_{train_dataset}" / "testing_SILIVRI2019" / "split0"
 
 
 def column(frame, names):
@@ -98,14 +99,14 @@ def prepare_picks(picks):
     return picks
 
 
-def load_model_result(experiment, epoch):
-    directory = result_dir(experiment)
+def load_model_result(experiment, epoch, train_dataset):
+    directory = result_dir(experiment, train_dataset)
     if not (directory / "meta.csv").exists() or not (directory / f"scores{epoch}.csv").exists():
         tester = KFoldTester(
             exp_name=experiment,
             representation_learning_model_class=RepresentationLearningMultipleAutoencoder,
             classifier_model_class=ClassifierMultipleAutoencoder,
-            train_dataset="SILIVRI2019",
+            train_dataset=train_dataset,
             test_dataset="SILIVRI2019",
             split=0,
             epochs=[epoch],
@@ -280,6 +281,14 @@ def percentile_rows(model_events, model_noise, event_id, magnitude):
     return pd.concat(rows, ignore_index=True)
 
 
+def median_confidence_interval(values, seed):
+    values = np.asarray(values, dtype=float)
+    rng = np.random.default_rng(seed)
+    samples = rng.choice(values, size=(2000, len(values)), replace=True)
+    medians = np.median(samples, axis=1)
+    return np.quantile(medians, [0.025, 0.975])
+
+
 def main():
     picks = prepare_picks(pd.read_csv(PICKS))
     model_events = {}
@@ -287,8 +296,8 @@ def main():
     model_points = {}
     event_id = None
     magnitude = None
-    for label, (experiment, epoch) in EXPERIMENTS.items():
-        metadata = load_model_result(experiment, epoch)
+    for label, (experiment, epoch, train_dataset) in EXPERIMENTS.items():
+        metadata = load_model_result(experiment, epoch, train_dataset)
         matched, event_id, magnitude = attach_events(metadata, picks)
         model_events[label] = {}
         model_noise[label] = {}
@@ -337,9 +346,9 @@ def main():
     percentile_data.to_csv(OUTPUT / "silivri_score_percentile_by_magnitude.csv", index=False)
     point_names = ["High recall", "Best F1"]
     model_names = list(EXPERIMENTS)
-    colors = {"No dilation": "#3b6ea8", "Dilation": "#d95f45"}
+    colors = {"No dilation": "#3b6ea8", "Dilation": "#d95f45", "INSTANCE-trained": "#4c956c"}
     panel_rows = [(stations, point) for stations in COINCIDENCE_LEVELS for point in point_names]
-    fig, axes = plt.subplots(len(panel_rows), 2, figsize=(9.0, 12.0), sharex=True, sharey=True)
+    fig, axes = plt.subplots(len(panel_rows), len(model_names), figsize=(13.0, 7.0), sharex=True, sharey=True)
     centers = BIN_EDGES[:-1] + np.diff(BIN_EDGES) / 2
     for row, (min_stations, point_name) in enumerate(panel_rows):
         for col, model_name in enumerate(model_names):
@@ -368,8 +377,8 @@ def main():
             ax.grid(axis="y", color="0.88", linewidth=0.6)
             ax.set_axisbelow(True)
     axes[0, 0].legend(frameon=False)
-    axes[-1, 0].set_xlabel("Magnitude")
-    axes[-1, 1].set_xlabel("Magnitude")
+    for col in range(len(model_names)):
+        axes[-1, col].set_xlabel("Magnitude")
     for row in range(len(panel_rows)):
         axes[row, 0].set_ylabel("Number of catalog events")
     fig.tight_layout()
@@ -378,7 +387,7 @@ def main():
     auc_fig, auc_axes = plt.subplots(2, 1, figsize=(9.0, 7.0), sharex=True, gridspec_kw={"height_ratios": [1, 1.4]})
     labels = [f"[{left:.1f}, {right:.1f})" for left, right in zip(BIN_EDGES[:-1], BIN_EDGES[1:])]
     x = np.arange(len(labels))
-    width = 0.38
+    width = 0.8 / len(model_names)
     truth = pd.read_csv(CATALOG, sep=r"\s+", skiprows=1, header=None, usecols=[11], names=["magnitude"])
     truth["magnitude_bin"] = pd.cut(truth["magnitude"], BIN_EDGES, right=False)
     truth_counts = truth.groupby("magnitude_bin", observed=False).size().to_numpy()
@@ -390,7 +399,7 @@ def main():
         values = auc_summary.loc[
             auc_summary["model"].eq(model_name) & auc_summary["min_stations"].eq(1)
         ]
-        offset = (col - 0.5) * width
+        offset = (col - (len(model_names) - 1) / 2) * width
         bars = ax.bar(
             x + offset,
             values["roc_auc"].to_numpy(),
@@ -418,10 +427,13 @@ def main():
     auc_fig.tight_layout()
     auc_fig.savefig(OUTPUT / "silivri_auc_by_magnitude.pdf", bbox_inches="tight")
     auc_fig.savefig(OUTPUT / "silivri_auc_by_magnitude.png", dpi=300, bbox_inches="tight")
-    percentile_fig = plt.figure(figsize=(9.0, 8.0))
-    grid = percentile_fig.add_gridspec(2, 2, height_ratios=[1, 1.5])
+    percentile_fig = plt.figure(figsize=(13.0, 8.0))
+    grid = percentile_fig.add_gridspec(2, len(model_names), height_ratios=[1, 1.5])
     gr_ax = percentile_fig.add_subplot(grid[0, :])
-    percentile_axes = [percentile_fig.add_subplot(grid[1, 0]), percentile_fig.add_subplot(grid[1, 1], sharey=percentile_fig.axes[-1])]
+    percentile_axes = []
+    for col in range(len(model_names)):
+        share = percentile_axes[0] if percentile_axes else None
+        percentile_axes.append(percentile_fig.add_subplot(grid[1, col], sharey=share))
     catalog_magnitudes = truth["magnitude"].dropna().sort_values().to_numpy()
     unique_magnitudes = np.unique(catalog_magnitudes)
     cumulative = np.array([np.sum(catalog_magnitudes >= value) for value in unique_magnitudes])
@@ -439,11 +451,14 @@ def main():
         grouped = values.groupby("equal_count_bin", observed=True)
         x = grouped["magnitude"].median().to_numpy()
         median = grouped["noise_percentile"].median().to_numpy()
-        lower = grouped["noise_percentile"].quantile(0.25).to_numpy()
-        upper = grouped["noise_percentile"].quantile(0.75).to_numpy()
-        xerr = np.vstack([x - grouped["magnitude"].min().to_numpy(), grouped["magnitude"].max().to_numpy() - x])
-        yerr = np.vstack([median - lower, upper - median])
-        ax.errorbar(x, median, xerr=xerr, yerr=yerr, fmt="o-", color="0.1", markerfacecolor=colors[model_name], linewidth=1.4, capsize=3)
+        intervals = np.array([
+            median_confidence_interval(group["noise_percentile"].to_numpy(), seed)
+            for seed, (_, group) in enumerate(grouped)
+        ])
+        lower = intervals[:, 0]
+        upper = intervals[:, 1]
+        ax.fill_between(x, lower, upper, color=colors[model_name], alpha=0.18, linewidth=0)
+        ax.plot(x, median, "o-", color="0.1", markerfacecolor=colors[model_name], linewidth=1.5, markersize=7)
         rho, pvalue = spearmanr(values["magnitude"], values["noise_percentile"], nan_policy="omit")
         ax.text(0.03, 0.96, f"Spearman $\\rho={rho:.2f}$\n$p={pvalue:.2g}$\n$n={len(values)}$", transform=ax.transAxes, ha="left", va="top", fontsize=9)
         ax.axhline(99, color="0.4", linestyle="--", linewidth=0.8)
