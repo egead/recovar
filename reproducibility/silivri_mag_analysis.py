@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from sklearn.metrics import roc_auc_score
 
 from kfold_tester import KFoldTester
 from recovar import ClassifierMultipleAutoencoder, RepresentationLearningMultipleAutoencoder
@@ -223,6 +224,40 @@ def operating_points(events, noise_scores):
     return {"High recall": best_recall, "Best F1": best_f1}
 
 
+def magnitude_auc_rows(model_events, model_noise, magnitude):
+    rows = []
+    bins = pd.IntervalIndex.from_breaks(BIN_EDGES, closed="left")
+    for model_name in model_events:
+        for min_stations in COINCIDENCE_LEVELS:
+            events = model_events[model_name][min_stations].copy()
+            noise = model_noise[model_name][min_stations]
+            finite = np.concatenate([events["score"].replace([np.inf, -np.inf], np.nan).dropna().to_numpy(), noise])
+            floor = np.min(finite) - max(np.ptp(finite), 1.0) * 1e-6
+            noise = np.where(np.isfinite(noise), noise, floor)
+            events["score"] = events["score"].where(np.isfinite(events["score"]), floor)
+            events["magnitude_bin"] = pd.cut(events[magnitude], BIN_EDGES, right=False)
+            for interval in bins:
+                positive = events.loc[events["magnitude_bin"].eq(interval), "score"].to_numpy()
+                auc = np.nan
+                if len(positive) and len(noise):
+                    labels = np.concatenate([np.ones(len(positive)), np.zeros(len(noise))])
+                    scores = np.concatenate([positive, noise])
+                    auc = roc_auc_score(labels, scores)
+                rows.append(
+                    {
+                        "model": model_name,
+                        "min_stations": min_stations,
+                        "magnitude_bin": str(interval),
+                        "magnitude_left": interval.left,
+                        "magnitude_right": interval.right,
+                        "n_events": len(positive),
+                        "n_noise_associations": len(noise),
+                        "roc_auc": auc,
+                    }
+                )
+    return pd.DataFrame(rows)
+
+
 def main():
     picks = prepare_picks(pd.read_csv(PICKS))
     model_events = {}
@@ -253,6 +288,7 @@ def main():
             cache[f"{prefix}_event_score"] = events["score"].to_numpy(dtype=float)
             cache[f"{prefix}_noise_score"] = model_noise[model_name][min_stations]
     np.savez_compressed(CACHE, **cache)
+    auc_summary = magnitude_auc_rows(model_events, model_noise, magnitude)
     summaries = []
     for label in model_events:
         for min_stations in COINCIDENCE_LEVELS:
@@ -274,6 +310,7 @@ def main():
     summary = pd.concat(summaries, ignore_index=True)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     summary.to_csv(OUTPUT / "silivri_recall_by_magnitude.csv", index=False)
+    auc_summary.to_csv(OUTPUT / "silivri_auc_by_magnitude.csv", index=False)
     point_names = ["High recall", "Best F1"]
     model_names = list(EXPERIMENTS)
     colors = {"No dilation": "#3b6ea8", "Dilation": "#d95f45"}
@@ -314,7 +351,45 @@ def main():
     fig.tight_layout()
     fig.savefig(OUTPUT / "silivri_magnitude_analysis.pdf", bbox_inches="tight")
     fig.savefig(OUTPUT / "silivri_magnitude_analysis.png", dpi=300, bbox_inches="tight")
+    auc_fig, auc_axes = plt.subplots(2, 1, figsize=(9.0, 7.0), sharex=True, sharey=True)
+    labels = [f"[{left:.1f}, {right:.1f})" for left, right in zip(BIN_EDGES[:-1], BIN_EDGES[1:])]
+    x = np.arange(len(labels))
+    width = 0.38
+    for row, min_stations in enumerate(COINCIDENCE_LEVELS):
+        ax = auc_axes[row]
+        for col, model_name in enumerate(model_names):
+            values = auc_summary.loc[
+                auc_summary["model"].eq(model_name) & auc_summary["min_stations"].eq(min_stations)
+            ]
+            offset = (col - 0.5) * width
+            bars = ax.bar(
+                x + offset,
+                values["roc_auc"].to_numpy(),
+                width=width,
+                color=colors[model_name],
+                edgecolor="0.2",
+                linewidth=0.5,
+                label=model_name,
+            )
+            counts = values["n_events"].to_numpy()
+            for bar, count in zip(bars, counts):
+                if count:
+                    ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.012, f"n={count}", ha="center", va="bottom", fontsize=7, rotation=90)
+        ax.axhline(0.5, color="0.35", linestyle="--", linewidth=0.8)
+        ax.set_ylim(0.45, 1.08)
+        ax.set_ylabel("ROC-AUC")
+        ax.set_title(f"{min_stations}-station coincidence")
+        ax.spines[["top", "right"]].set_visible(False)
+        ax.grid(axis="y", color="0.88", linewidth=0.6)
+        ax.set_axisbelow(True)
+    auc_axes[0].legend(frameon=False)
+    auc_axes[-1].set_xticks(x, labels, rotation=45, ha="right")
+    auc_axes[-1].set_xlabel("Magnitude interval")
+    auc_fig.tight_layout()
+    auc_fig.savefig(OUTPUT / "silivri_auc_by_magnitude.pdf", bbox_inches="tight")
+    auc_fig.savefig(OUTPUT / "silivri_auc_by_magnitude.png", dpi=300, bbox_inches="tight")
     print(OUTPUT / "silivri_magnitude_analysis.pdf")
+    print(OUTPUT / "silivri_auc_by_magnitude.pdf")
 
 
 if __name__ == "__main__":
