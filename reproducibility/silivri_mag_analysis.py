@@ -218,7 +218,6 @@ def noise_coincidence_scores(metadata, min_stations):
 
 def magnitude_auc_rows(model_events, model_noise, magnitude, magnitude_edges):
     rows = []
-    bins = pd.IntervalIndex.from_breaks(magnitude_edges, closed="left")
     for model_name in model_events:
         for min_stations in COINCIDENCE_LEVELS:
             events = model_events[model_name][min_stations].copy()
@@ -227,9 +226,9 @@ def magnitude_auc_rows(model_events, model_noise, magnitude, magnitude_edges):
             floor = np.min(finite) - max(np.ptp(finite), 1.0) * 1e-6
             noise = np.where(np.isfinite(noise), noise, floor)
             events["score"] = events["score"].where(np.isfinite(events["score"]), floor)
-            events["magnitude_bin"] = pd.cut(events[magnitude], magnitude_edges, right=False)
-            for interval in bins:
-                positive = events.loc[events["magnitude_bin"].eq(interval), "score"].to_numpy()
+            for bin_index, (left, right) in enumerate(zip(magnitude_edges[:-1], magnitude_edges[1:])):
+                mask = events[magnitude].ge(left) & events[magnitude].lt(right)
+                positive = events.loc[mask, "score"].to_numpy()
                 auc = np.nan
                 if len(positive) and len(noise):
                     labels = np.concatenate([np.ones(len(positive)), np.zeros(len(noise))])
@@ -239,9 +238,9 @@ def magnitude_auc_rows(model_events, model_noise, magnitude, magnitude_edges):
                     {
                         "model": model_name,
                         "min_stations": min_stations,
-                        "magnitude_bin": str(interval),
-                        "magnitude_left": interval.left,
-                        "magnitude_right": interval.right,
+                        "magnitude_bin": bin_index,
+                        "magnitude_left": left,
+                        "magnitude_right": right,
                         "n_events": len(positive),
                         "n_noise_associations": len(noise),
                         "roc_auc": auc,
@@ -376,7 +375,15 @@ def main():
     ax.set_ylim(0.45, 1.08)
     ax.set_ylabel("ROC-AUC")
     ax.set_title("1-station detection")
-    ax.legend(frameon=False, fontsize=7, ncol=2, loc="lower right", handlelength=1.4, columnspacing=0.8)
+    ax.legend(
+        frameon=False,
+        fontsize=8,
+        ncol=1,
+        loc="center left",
+        bbox_to_anchor=(1.01, 0.5),
+        handlelength=1.4,
+        labelspacing=0.45,
+    )
     ax.spines[["top", "right"]].set_visible(False)
     ax.grid(axis="y", color="0.88", linewidth=0.6)
     ax.set_axisbelow(True)
