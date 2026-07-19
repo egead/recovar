@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_auc_score
-from scipy.stats import spearmanr
 
 from kfold_tester import KFoldTester
 from recovar import ClassifierMultipleAutoencoder, RepresentationLearningMultipleAutoencoder
@@ -27,7 +26,6 @@ EXPERIMENTS = {
     "INSTANCE-trained": ("exp_instance", 11, "instance"),
 }
 MATCH_TOLERANCE_SECONDS = 0.05
-BIN_EDGES = np.arange(0.5, 6.6, 0.5)
 COINCIDENCE_WINDOW_SECONDS = 20.0
 COINCIDENCE_LEVELS = [1]
 
@@ -226,9 +224,9 @@ def operating_points(events, noise_scores):
     return {"High recall": best_recall, "Best F1": best_f1}
 
 
-def magnitude_auc_rows(model_events, model_noise, magnitude):
+def magnitude_auc_rows(model_events, model_noise, magnitude, magnitude_edges):
     rows = []
-    bins = pd.IntervalIndex.from_breaks(BIN_EDGES, closed="left")
+    bins = pd.IntervalIndex.from_breaks(magnitude_edges, closed="left")
     for model_name in model_events:
         for min_stations in COINCIDENCE_LEVELS:
             events = model_events[model_name][min_stations].copy()
@@ -237,7 +235,7 @@ def magnitude_auc_rows(model_events, model_noise, magnitude):
             floor = np.min(finite) - max(np.ptp(finite), 1.0) * 1e-6
             noise = np.where(np.isfinite(noise), noise, floor)
             events["score"] = events["score"].where(np.isfinite(events["score"]), floor)
-            events["magnitude_bin"] = pd.cut(events[magnitude], BIN_EDGES, right=False)
+            events["magnitude_bin"] = pd.cut(events[magnitude], magnitude_edges, right=False)
             for interval in bins:
                 positive = events.loc[events["magnitude_bin"].eq(interval), "score"].to_numpy()
                 auc = np.nan
@@ -258,35 +256,6 @@ def magnitude_auc_rows(model_events, model_noise, magnitude):
                     }
                 )
     return pd.DataFrame(rows)
-
-
-def percentile_rows(model_events, model_noise, event_id, magnitude):
-    rows = []
-    for model_name in model_events:
-        events = model_events[model_name][1].copy()
-        noise = np.sort(model_noise[model_name][1])
-        scores = events["score"].to_numpy()
-        percentiles = np.searchsorted(noise, scores, side="right") / len(noise) * 100.0
-        frame = pd.DataFrame(
-            {
-                "model": model_name,
-                "event_id": events[event_id].astype(str),
-                "magnitude": events[magnitude].to_numpy(),
-                "event_score": scores,
-                "noise_percentile": percentiles,
-            }
-        )
-        frame["equal_count_bin"] = pd.qcut(frame["magnitude"], q=5, duplicates="drop")
-        rows.append(frame)
-    return pd.concat(rows, ignore_index=True)
-
-
-def median_confidence_interval(values, seed):
-    values = np.asarray(values, dtype=float)
-    rng = np.random.default_rng(seed)
-    samples = rng.choice(values, size=(2000, len(values)), replace=True)
-    medians = np.median(samples, axis=1)
-    return np.quantile(medians, [0.025, 0.975])
 
 
 def main():
@@ -319,8 +288,11 @@ def main():
             cache[f"{prefix}_event_score"] = events["score"].to_numpy(dtype=float)
             cache[f"{prefix}_noise_score"] = model_noise[model_name][min_stations]
     np.savez_compressed(CACHE, **cache)
-    auc_summary = magnitude_auc_rows(model_events, model_noise, magnitude)
-    percentile_data = percentile_rows(model_events, model_noise, event_id, magnitude)
+    reference_events = model_events[next(iter(model_events))][1]
+    magnitude_edges = np.unique(np.quantile(reference_events[magnitude].dropna(), np.linspace(0.0, 1.0, 6)))
+    magnitude_edges[0] = np.nextafter(magnitude_edges[0], -np.inf)
+    magnitude_edges[-1] = np.nextafter(magnitude_edges[-1], np.inf)
+    auc_summary = magnitude_auc_rows(model_events, model_noise, magnitude, magnitude_edges)
     summaries = []
     for label in model_events:
         for min_stations in COINCIDENCE_LEVELS:
@@ -328,7 +300,7 @@ def main():
             for point_name, point in model_points[label][min_stations].items():
                 selected = events.copy()
                 selected["detected"] = selected["score"] >= point["threshold"]
-                selected["magnitude_bin"] = pd.cut(selected[magnitude], BIN_EDGES, right=False)
+                selected["magnitude_bin"] = pd.cut(selected[magnitude], magnitude_edges, right=False)
                 summary = selected.groupby("magnitude_bin", observed=False)["detected"].agg(["sum", "count"]).reset_index()
                 summary = summary.rename(columns={"sum": "detected", "count": "total"})
                 summary["missed"] = summary["total"] - summary["detected"]
@@ -343,13 +315,12 @@ def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     summary.to_csv(OUTPUT / "silivri_recall_by_magnitude.csv", index=False)
     auc_summary.to_csv(OUTPUT / "silivri_auc_by_magnitude.csv", index=False)
-    percentile_data.to_csv(OUTPUT / "silivri_score_percentile_by_magnitude.csv", index=False)
     point_names = ["High recall", "Best F1"]
     model_names = list(EXPERIMENTS)
     colors = {"No dilation": "#3b6ea8", "Dilation": "#d95f45", "INSTANCE-trained": "#4c956c"}
     panel_rows = [(stations, point) for stations in COINCIDENCE_LEVELS for point in point_names]
     fig, axes = plt.subplots(len(panel_rows), len(model_names), figsize=(13.0, 7.0), sharex=True, sharey=True)
-    centers = BIN_EDGES[:-1] + np.diff(BIN_EDGES) / 2
+    centers = magnitude_edges[:-1] + np.diff(magnitude_edges) / 2
     for row, (min_stations, point_name) in enumerate(panel_rows):
         for col, model_name in enumerate(model_names):
             ax = axes[row, col]
@@ -361,8 +332,8 @@ def main():
             total = values["total"].to_numpy()
             detected = values["detected"].to_numpy()
             point = model_points[model_name][min_stations][point_name]
-            ax.bar(centers, total, width=np.diff(BIN_EDGES) * 0.92, color="0.88", edgecolor="0.35", linewidth=0.7, label="Missed")
-            ax.bar(centers, detected, width=np.diff(BIN_EDGES) * 0.92, color=colors[model_name], edgecolor="0.2", linewidth=0.5, label="Detected")
+            ax.bar(centers, total, width=np.diff(magnitude_edges) * 0.92, color="0.88", edgecolor="0.35", linewidth=0.7, label="Missed")
+            ax.bar(centers, detected, width=np.diff(magnitude_edges) * 0.92, color=colors[model_name], edgecolor="0.2", linewidth=0.5, label="Detected")
             ax.set_title(f"{model_name} — {min_stations}-station — {point_name}")
             ax.text(
                 0.98,
@@ -385,11 +356,11 @@ def main():
     fig.savefig(OUTPUT / "silivri_magnitude_analysis.pdf", bbox_inches="tight")
     fig.savefig(OUTPUT / "silivri_magnitude_analysis.png", dpi=300, bbox_inches="tight")
     auc_fig, auc_axes = plt.subplots(2, 1, figsize=(9.0, 7.0), sharex=True, gridspec_kw={"height_ratios": [1, 1.4]})
-    labels = [f"[{left:.1f}, {right:.1f})" for left, right in zip(BIN_EDGES[:-1], BIN_EDGES[1:])]
+    labels = [f"[{left:.2f}, {right:.2f})" for left, right in zip(magnitude_edges[:-1], magnitude_edges[1:])]
     x = np.arange(len(labels))
     width = 0.8 / len(model_names)
     truth = pd.read_csv(CATALOG, sep=r"\s+", skiprows=1, header=None, usecols=[11], names=["magnitude"])
-    truth["magnitude_bin"] = pd.cut(truth["magnitude"], BIN_EDGES, right=False)
+    truth["magnitude_bin"] = pd.cut(truth["magnitude"], magnitude_edges, right=False)
     truth_counts = truth.groupby("magnitude_bin", observed=False).size().to_numpy()
     auc_axes[0].bar(x, truth_counts, width=0.82, color="0.45", edgecolor="0.2", linewidth=0.6)
     auc_axes[0].set_ylabel("Catalog events")
@@ -427,53 +398,8 @@ def main():
     auc_fig.tight_layout()
     auc_fig.savefig(OUTPUT / "silivri_auc_by_magnitude.pdf", bbox_inches="tight")
     auc_fig.savefig(OUTPUT / "silivri_auc_by_magnitude.png", dpi=300, bbox_inches="tight")
-    percentile_fig = plt.figure(figsize=(13.0, 8.0))
-    grid = percentile_fig.add_gridspec(2, len(model_names), height_ratios=[1, 1.5])
-    gr_ax = percentile_fig.add_subplot(grid[0, :])
-    percentile_axes = []
-    for col in range(len(model_names)):
-        share = percentile_axes[0] if percentile_axes else None
-        percentile_axes.append(percentile_fig.add_subplot(grid[1, col], sharey=share))
-    catalog_magnitudes = truth["magnitude"].dropna().sort_values().to_numpy()
-    unique_magnitudes = np.unique(catalog_magnitudes)
-    cumulative = np.array([np.sum(catalog_magnitudes >= value) for value in unique_magnitudes])
-    gr_ax.semilogy(unique_magnitudes, cumulative, color="0.15", linewidth=1.6)
-    gr_ax.axvline(1.1, color="#d95f45", linestyle="--", linewidth=1.0, label="$M_c=1.1$")
-    gr_ax.set_xlabel("Magnitude")
-    gr_ax.set_ylabel(r"Cumulative number $N(M\geq m)$")
-    gr_ax.set_title("Durand catalog frequency–magnitude distribution")
-    gr_ax.legend(frameon=False)
-    gr_ax.spines[["top", "right"]].set_visible(False)
-    gr_ax.grid(color="0.88", linewidth=0.6)
-    for ax, model_name in zip(percentile_axes, model_names):
-        values = percentile_data.loc[percentile_data["model"].eq(model_name)].copy()
-        ax.scatter(values["magnitude"], values["noise_percentile"], s=18, alpha=0.28, color=colors[model_name], edgecolors="none")
-        grouped = values.groupby("equal_count_bin", observed=True)
-        x = grouped["magnitude"].median().to_numpy()
-        median = grouped["noise_percentile"].median().to_numpy()
-        intervals = np.array([
-            median_confidence_interval(group["noise_percentile"].to_numpy(), seed)
-            for seed, (_, group) in enumerate(grouped)
-        ])
-        lower = intervals[:, 0]
-        upper = intervals[:, 1]
-        ax.fill_between(x, lower, upper, color=colors[model_name], alpha=0.18, linewidth=0)
-        ax.plot(x, median, "o-", color="0.1", markerfacecolor=colors[model_name], linewidth=1.5, markersize=7)
-        rho, pvalue = spearmanr(values["magnitude"], values["noise_percentile"], nan_policy="omit")
-        ax.text(0.03, 0.96, f"Spearman $\\rho={rho:.2f}$\n$p={pvalue:.2g}$\n$n={len(values)}$", transform=ax.transAxes, ha="left", va="top", fontsize=9)
-        ax.axhline(99, color="0.4", linestyle="--", linewidth=0.8)
-        ax.set_ylim(0, 102)
-        ax.set_xlabel("Magnitude")
-        ax.set_title(model_name)
-        ax.spines[["top", "right"]].set_visible(False)
-        ax.grid(color="0.9", linewidth=0.6)
-    percentile_axes[0].set_ylabel("Event-score percentile relative to noise")
-    percentile_fig.tight_layout()
-    percentile_fig.savefig(OUTPUT / "silivri_score_percentile_by_magnitude.pdf", bbox_inches="tight")
-    percentile_fig.savefig(OUTPUT / "silivri_score_percentile_by_magnitude.png", dpi=300, bbox_inches="tight")
     print(OUTPUT / "silivri_magnitude_analysis.pdf")
     print(OUTPUT / "silivri_auc_by_magnitude.pdf")
-    print(OUTPUT / "silivri_score_percentile_by_magnitude.pdf")
 
 
 if __name__ == "__main__":
