@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_auc_score
+from scipy.stats import spearmanr
 
 from kfold_tester import KFoldTester
 from recovar import ClassifierMultipleAutoencoder, RepresentationLearningMultipleAutoencoder
@@ -258,6 +259,27 @@ def magnitude_auc_rows(model_events, model_noise, magnitude):
     return pd.DataFrame(rows)
 
 
+def percentile_rows(model_events, model_noise, event_id, magnitude):
+    rows = []
+    for model_name in model_events:
+        events = model_events[model_name][1].copy()
+        noise = np.sort(model_noise[model_name][1])
+        scores = events["score"].to_numpy()
+        percentiles = np.searchsorted(noise, scores, side="right") / len(noise) * 100.0
+        frame = pd.DataFrame(
+            {
+                "model": model_name,
+                "event_id": events[event_id].astype(str),
+                "magnitude": events[magnitude].to_numpy(),
+                "event_score": scores,
+                "noise_percentile": percentiles,
+            }
+        )
+        frame["equal_count_bin"] = pd.qcut(frame["magnitude"], q=5, duplicates="drop")
+        rows.append(frame)
+    return pd.concat(rows, ignore_index=True)
+
+
 def main():
     picks = prepare_picks(pd.read_csv(PICKS))
     model_events = {}
@@ -289,6 +311,7 @@ def main():
             cache[f"{prefix}_noise_score"] = model_noise[model_name][min_stations]
     np.savez_compressed(CACHE, **cache)
     auc_summary = magnitude_auc_rows(model_events, model_noise, magnitude)
+    percentile_data = percentile_rows(model_events, model_noise, event_id, magnitude)
     summaries = []
     for label in model_events:
         for min_stations in COINCIDENCE_LEVELS:
@@ -311,6 +334,7 @@ def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     summary.to_csv(OUTPUT / "silivri_recall_by_magnitude.csv", index=False)
     auc_summary.to_csv(OUTPUT / "silivri_auc_by_magnitude.csv", index=False)
+    percentile_data.to_csv(OUTPUT / "silivri_score_percentile_by_magnitude.csv", index=False)
     point_names = ["High recall", "Best F1"]
     model_names = list(EXPERIMENTS)
     colors = {"No dilation": "#3b6ea8", "Dilation": "#d95f45"}
@@ -394,8 +418,47 @@ def main():
     auc_fig.tight_layout()
     auc_fig.savefig(OUTPUT / "silivri_auc_by_magnitude.pdf", bbox_inches="tight")
     auc_fig.savefig(OUTPUT / "silivri_auc_by_magnitude.png", dpi=300, bbox_inches="tight")
+    percentile_fig = plt.figure(figsize=(9.0, 8.0))
+    grid = percentile_fig.add_gridspec(2, 2, height_ratios=[1, 1.5])
+    gr_ax = percentile_fig.add_subplot(grid[0, :])
+    percentile_axes = [percentile_fig.add_subplot(grid[1, 0]), percentile_fig.add_subplot(grid[1, 1], sharey=percentile_fig.axes[-1])]
+    catalog_magnitudes = truth["magnitude"].dropna().sort_values().to_numpy()
+    unique_magnitudes = np.unique(catalog_magnitudes)
+    cumulative = np.array([np.sum(catalog_magnitudes >= value) for value in unique_magnitudes])
+    gr_ax.semilogy(unique_magnitudes, cumulative, color="0.15", linewidth=1.6)
+    gr_ax.axvline(1.1, color="#d95f45", linestyle="--", linewidth=1.0, label="$M_c=1.1$")
+    gr_ax.set_xlabel("Magnitude")
+    gr_ax.set_ylabel(r"Cumulative number $N(M\geq m)$")
+    gr_ax.set_title("Durand catalog frequency–magnitude distribution")
+    gr_ax.legend(frameon=False)
+    gr_ax.spines[["top", "right"]].set_visible(False)
+    gr_ax.grid(color="0.88", linewidth=0.6)
+    for ax, model_name in zip(percentile_axes, model_names):
+        values = percentile_data.loc[percentile_data["model"].eq(model_name)].copy()
+        ax.scatter(values["magnitude"], values["noise_percentile"], s=18, alpha=0.28, color=colors[model_name], edgecolors="none")
+        grouped = values.groupby("equal_count_bin", observed=True)
+        x = grouped["magnitude"].median().to_numpy()
+        median = grouped["noise_percentile"].median().to_numpy()
+        lower = grouped["noise_percentile"].quantile(0.25).to_numpy()
+        upper = grouped["noise_percentile"].quantile(0.75).to_numpy()
+        xerr = np.vstack([x - grouped["magnitude"].min().to_numpy(), grouped["magnitude"].max().to_numpy() - x])
+        yerr = np.vstack([median - lower, upper - median])
+        ax.errorbar(x, median, xerr=xerr, yerr=yerr, fmt="o-", color="0.1", markerfacecolor=colors[model_name], linewidth=1.4, capsize=3)
+        rho, pvalue = spearmanr(values["magnitude"], values["noise_percentile"], nan_policy="omit")
+        ax.text(0.03, 0.96, f"Spearman $\\rho={rho:.2f}$\n$p={pvalue:.2g}$\n$n={len(values)}$", transform=ax.transAxes, ha="left", va="top", fontsize=9)
+        ax.axhline(99, color="0.4", linestyle="--", linewidth=0.8)
+        ax.set_ylim(0, 102)
+        ax.set_xlabel("Magnitude")
+        ax.set_title(model_name)
+        ax.spines[["top", "right"]].set_visible(False)
+        ax.grid(color="0.9", linewidth=0.6)
+    percentile_axes[0].set_ylabel("Event-score percentile relative to noise")
+    percentile_fig.tight_layout()
+    percentile_fig.savefig(OUTPUT / "silivri_score_percentile_by_magnitude.pdf", bbox_inches="tight")
+    percentile_fig.savefig(OUTPUT / "silivri_score_percentile_by_magnitude.png", dpi=300, bbox_inches="tight")
     print(OUTPUT / "silivri_magnitude_analysis.pdf")
     print(OUTPUT / "silivri_auc_by_magnitude.pdf")
+    print(OUTPUT / "silivri_score_percentile_by_magnitude.pdf")
 
 
 if __name__ == "__main__":
