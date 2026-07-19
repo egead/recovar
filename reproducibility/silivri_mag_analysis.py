@@ -27,7 +27,7 @@ EXPERIMENTS = {
 MATCH_TOLERANCE_SECONDS = 0.05
 BIN_EDGES = np.arange(0.5, 6.6, 0.5)
 COINCIDENCE_WINDOW_SECONDS = 20.0
-COINCIDENCE_LEVELS = [1, 3]
+COINCIDENCE_LEVELS = [1]
 
 
 def result_dir(experiment):
@@ -351,38 +351,44 @@ def main():
     fig.tight_layout()
     fig.savefig(OUTPUT / "silivri_magnitude_analysis.pdf", bbox_inches="tight")
     fig.savefig(OUTPUT / "silivri_magnitude_analysis.png", dpi=300, bbox_inches="tight")
-    auc_fig, auc_axes = plt.subplots(2, 1, figsize=(9.0, 7.0), sharex=True, sharey=True)
+    auc_fig, auc_axes = plt.subplots(2, 1, figsize=(9.0, 7.0), sharex=True, gridspec_kw={"height_ratios": [1, 1.4]})
     labels = [f"[{left:.1f}, {right:.1f})" for left, right in zip(BIN_EDGES[:-1], BIN_EDGES[1:])]
     x = np.arange(len(labels))
     width = 0.38
-    for row, min_stations in enumerate(COINCIDENCE_LEVELS):
-        ax = auc_axes[row]
-        for col, model_name in enumerate(model_names):
-            values = auc_summary.loc[
-                auc_summary["model"].eq(model_name) & auc_summary["min_stations"].eq(min_stations)
-            ]
-            offset = (col - 0.5) * width
-            bars = ax.bar(
-                x + offset,
-                values["roc_auc"].to_numpy(),
-                width=width,
-                color=colors[model_name],
-                edgecolor="0.2",
-                linewidth=0.5,
-                label=model_name,
-            )
-            counts = values["n_events"].to_numpy()
-            for bar, count in zip(bars, counts):
-                if count:
-                    ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.012, f"n={count}", ha="center", va="bottom", fontsize=7, rotation=90)
-        ax.axhline(0.5, color="0.35", linestyle="--", linewidth=0.8)
-        ax.set_ylim(0.45, 1.08)
-        ax.set_ylabel("ROC-AUC")
-        ax.set_title(f"{min_stations}-station coincidence")
+    truth = pd.read_csv(CATALOG, sep=r"\s+", skiprows=1, header=None, usecols=[11], names=["magnitude"])
+    truth["magnitude_bin"] = pd.cut(truth["magnitude"], BIN_EDGES, right=False)
+    truth_counts = truth.groupby("magnitude_bin", observed=False).size().to_numpy()
+    auc_axes[0].bar(x, truth_counts, width=0.82, color="0.45", edgecolor="0.2", linewidth=0.6)
+    auc_axes[0].set_ylabel("Catalog events")
+    auc_axes[0].set_title("Catalog magnitude distribution")
+    ax = auc_axes[1]
+    for col, model_name in enumerate(model_names):
+        values = auc_summary.loc[
+            auc_summary["model"].eq(model_name) & auc_summary["min_stations"].eq(1)
+        ]
+        offset = (col - 0.5) * width
+        bars = ax.bar(
+            x + offset,
+            values["roc_auc"].to_numpy(),
+            width=width,
+            color=colors[model_name],
+            edgecolor="0.2",
+            linewidth=0.5,
+            label=model_name,
+        )
+        counts = values["n_events"].to_numpy()
+        for bar, count in zip(bars, counts):
+            if count:
+                ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.012, f"n={count}", ha="center", va="bottom", fontsize=7, rotation=90)
+    ax.axhline(0.5, color="0.35", linestyle="--", linewidth=0.8)
+    ax.set_ylim(0.45, 1.08)
+    ax.set_ylabel("ROC-AUC")
+    ax.set_title("1-station detection")
+    ax.legend(frameon=False)
+    for ax in auc_axes:
         ax.spines[["top", "right"]].set_visible(False)
         ax.grid(axis="y", color="0.88", linewidth=0.6)
         ax.set_axisbelow(True)
-    auc_axes[0].legend(frameon=False)
     auc_axes[-1].set_xticks(x, labels, rotation=45, ha="right")
     auc_axes[-1].set_xlabel("Magnitude interval")
     auc_fig.tight_layout()
